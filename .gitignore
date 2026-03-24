@@ -13,5 +13,8 @@ Robjgrader/src/*.dll
 # testthat snapshots (generated)
 Robjgrader/tests/testthat/_snaps/
 
+# pkgdown (built by GitHub Actions)
+Robjgrader/docs/
+
 # macOS
 .DS_Store

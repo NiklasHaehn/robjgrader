@@ -1,0 +1,43 @@
+url: https://niklashaehn.github.io/robjgrader
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+
+home:
+  title: Robjgrader
+  description: >
+    Runtime object recorder and semantic validator for automated grading
+    of R submissions in political science methods courses.
+
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [github]
+  components:
+    github:
+      icon: fab fa-github fa-lg
+      href: https://github.com/NiklasHaehn/robjgrader
+
+reference:
+  - title: Recording
+    desc: Capture objects from R scripts or interactive sessions.
+    contents:
+      - record_script
+      - record_start
+      - record_stop
+      - get_records
+      - source_student_file
+      - grab
+
+  - title: Validation
+    desc: Validate recorded objects against expectations.
+    contents:
+      - validate
+
+  - title: Autograder
+    desc: Run test cases and produce Gradescope-compatible output.
+    contents:
+      - run_autograder
+      - ag_submission_test
+      - result_to_outcome

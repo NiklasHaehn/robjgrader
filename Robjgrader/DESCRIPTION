@@ -14,6 +14,8 @@ Description: Records analytical objects produced during the execution of an R
     Designed for methods teaching, automated grading, and reproducibility
     checks.
 License: MIT + file LICENSE
+URL: https://niklashaehn.github.io/robjgrader, https://github.com/NiklasHaehn/robjgrader
+BugReports: https://github.com/NiklasHaehn/robjgrader/issues
 Encoding: UTF-8
 Imports:
     rlang,

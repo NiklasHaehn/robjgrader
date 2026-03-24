@@ -28,6 +28,9 @@ jobs:
           extra-packages: any::pkgdown
           needs: website
 
+      - name: Install package
+        run: R CMD INSTALL Robjgrader
+
       - name: Build pkgdown site
         run: pkgdown::build_site_github_pages(pkg = "Robjgrader", new_process = FALSE, clean = TRUE)
         shell: Rscript {0}

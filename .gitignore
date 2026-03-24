@@ -1,0 +1,17 @@
+# R
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Package build artefacts
+Robjgrader/*.tar.gz
+Robjgrader/src/*.o
+Robjgrader/src/*.so
+Robjgrader/src/*.dll
+
+# testthat snapshots (generated)
+Robjgrader/tests/testthat/_snaps/
+
+# macOS
+.DS_Store

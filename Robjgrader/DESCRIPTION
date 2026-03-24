@@ -1,0 +1,31 @@
+Package: Robjgrader
+Type: Package
+Title: Runtime Object Recorder and Semantic Validator for Teaching in R
+Version: 0.1.1
+Authors@R: c(
+    person(
+      "Niklas", "Haehn",
+      email = "niklas.haehn@ucsd.edu",
+      role = c("aut", "cre")
+    )
+  )
+Description: Records analytical objects produced during the execution of an R
+    script and validates them against pedagogical or substantive expectations.
+    Designed for methods teaching, automated grading, and reproducibility
+    checks.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    rlang,
+    jsonlite
+Suggests:
+    ggplot2,
+    fixest,
+    lme4,
+    reformulas,
+    gt,
+    tinytable,
+    flextable,
+    huxtable,
+    testthat (>= 3.0.0)
+RoxygenNote: 7.3.3

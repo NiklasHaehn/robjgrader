@@ -1,0 +1,16 @@
+export(record_start)
+export(record_script)
+export(record_stop)
+export(get_records)
+export(validate)
+export(source_student_file)
+export(grab)
+export(result_to_outcome)
+export(ag_submission_test)
+export(run_autograder)
+
+S3method(print, robjgrader_records)
+S3method(print, robjgrader_result)
+
+importFrom(rlang, as_label)
+importFrom(stats, family, formula, nobs, setNames, terms)

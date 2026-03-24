@@ -45,8 +45,117 @@
   </div>
 </nav><div class="container template-home">
 <div class="row">
-  <main id="main" class="col-md-9">
-Records analytical objects produced during the execution of an R script and validates them against pedagogical or substantive expectations. Designed for methods teaching, automated grading, and reproducibility checks.
+  <main id="main" class="col-md-9"><div class="section level1">
+<div class="page-header"><h1 id="automated-grading-of-r-submissions-for-political-science-methods-courses">Automated Grading of R Submissions for Political Science Methods Courses<a class="anchor" aria-label="anchor" href="#automated-grading-of-r-submissions-for-political-science-methods-courses"></a>
+</h1></div>
+<!-- badges: start -->
+
+<div class="section level3">
+<h3 id="purpose">Purpose<a class="anchor" aria-label="anchor" href="#purpose"></a>
+</h3>
+<p>Automated grading of student R scripts requires two things: capturing what a student’s script produces, and checking whether those objects meet substantive expectations. Existing tools handle one or the other — but not in a way designed for the heterogeneous output of a political science methods course, where a single problem set might ask for a cleaned data frame, a <code>ggplot2</code> visualization, an OLS or fixed-effects model, and a formatted regression table.</p>
+<p><strong>Robjgrader</strong> provides a unified pipeline for this task. It records every analytical object a student’s script assigns or prints, and exposes a flexible validation interface that checks objects by name, type, or structural similarity against a reference solution — without requiring students to follow a fixed naming convention.</p>
+</div>
+<div class="section level3">
+<h3 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
+</h3>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># remotes::install_github("NiklasHaehn/robjgrader")</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://niklashaehn.github.io/robjgrader">Robjgrader</a></span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="workflow">Workflow<a class="anchor" aria-label="anchor" href="#workflow"></a>
+</h3>
+<p>A typical autograder script has three stages:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://niklashaehn.github.io/robjgrader">Robjgrader</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 1. Record all objects produced by the student's script</span></span>
+<span><span class="va">records</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/source_student_file.html">source_student_file</a></span><span class="op">(</span><span class="st">"autograde.R"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 2. Validate individual objects</span></span>
+<span><span class="va">res_df</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate.html">validate</a></span><span class="op">(</span><span class="va">records</span>, <span class="st">"clean_data"</span>,</span>
+<span>  checks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>nrow <span class="op">=</span> <span class="fl">1000</span>, required <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"country"</span>, <span class="st">"gdp_pc"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">res_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate.html">validate</a></span><span class="op">(</span><span class="va">records</span>, <span class="st">"ols_model"</span>,</span>
+<span>  checks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>estimator <span class="op">=</span> <span class="st">"lm"</span>, required <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"gdp_pc"</span>, <span class="st">"polity2"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 3. Run all test cases and write Gradescope-compatible JSON</span></span>
+<span><span class="va">test_cases</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"clean_data"</span>, result <span class="op">=</span> <span class="va">res_df</span>,    max_score <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"ols_model"</span>,  result <span class="op">=</span> <span class="va">res_model</span>, max_score <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/run_autograder.html">run_autograder</a></span><span class="op">(</span><span class="va">test_cases</span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="reference/run_autograder.html">run_autograder()</a></code> writes results to <code>/autograder/results/results.json</code> (Gradescope format) and prints a summary to the console.</p>
+</div>
+<div class="section level3">
+<h3 id="key-functions">Key Functions<a class="anchor" aria-label="anchor" href="#key-functions"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Function</th>
+<th align="left">Description</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code><a href="reference/record_script.html">record_script()</a></code></td>
+<td align="left">Parse and evaluate a student script expression by expression, capturing all assigned and printed objects</td>
+</tr>
+<tr class="even">
+<td align="left"><code><a href="reference/source_student_file.html">source_student_file()</a></code></td>
+<td align="left">Locate and record a student submission file automatically, excluding the calling script</td>
+</tr>
+<tr class="odd">
+<td align="left"><code><a href="reference/get_records.html">get_records()</a></code></td>
+<td align="left">Retrieve and filter recorded objects by type</td>
+</tr>
+<tr class="even">
+<td align="left"><code><a href="reference/grab.html">grab()</a></code></td>
+<td align="left">Wrap a single object from the global environment into a one-element records list</td>
+</tr>
+<tr class="odd">
+<td align="left"><code><a href="reference/validate.html">validate()</a></code></td>
+<td align="left">Validate a recorded object by name, match criteria, or reference object</td>
+</tr>
+<tr class="even">
+<td align="left"><code><a href="reference/run_autograder.html">run_autograder()</a></code></td>
+<td align="left">Execute a list of test cases and produce Gradescope-compatible output</td>
+</tr>
+<tr class="odd">
+<td align="left"><code><a href="reference/result_to_outcome.html">result_to_outcome()</a></code></td>
+<td align="left">Convert a validation result to a <code>"SUCCESS"</code> string or formatted failure message</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="supported-object-types">Supported Object Types<a class="anchor" aria-label="anchor" href="#supported-object-types"></a>
+</h3>
+<ul>
+<li>
+<strong>Data frames</strong> — dimensions, column names, column types</li>
+<li>
+<strong>ggplot2 plots</strong> — geoms, aesthetic mappings, facets, labels, scales</li>
+<li>
+<strong>Models</strong> — <code>lm</code>, <code>glm</code>, <code>fixest</code> (with fixed effects and clustering), <code>lmer</code>/<code>glmer</code>
+</li>
+<li>
+<strong>Regression tables</strong> — <code>gt</code>, <code>flextable</code>, <code>tinytable</code>, <code>huxtable</code>; checks for model count, terms, GOF rows, and column labels</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="gradescope-integration">Gradescope Integration<a class="anchor" aria-label="anchor" href="#gradescope-integration"></a>
+</h3>
+<p>The package is designed for deployment on <a href="https://www.gradescope.com/" class="external-link">Gradescope</a> via a Docker-based autograder. <code><a href="reference/run_autograder.html">run_autograder()</a></code> writes its output directly to the path Gradescope expects. Partial credit, per-test score weights, and descriptive failure messages are all supported.</p>
+</div>
+</div>
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
@@ -79,7 +188,12 @@ Records analytical objects produced during the execution of an R script and vali
 </ul>
 </div>
 
-
+<div class="dev-status">
+<h2 data-toc-skip>Dev status</h2>
+<ul class="list-unstyled">
+<li><a href="https://github.com/NiklasHaehn/robjgrader/actions/workflows/pkgdown.yml" class="external-link"><img src="https://github.com/NiklasHaehn/robjgrader/actions/workflows/pkgdown.yml/badge.svg" alt="pkgdown"></a></li>
+</ul>
+</div>
 
   </aside>
 </div>

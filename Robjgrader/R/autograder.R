@@ -160,6 +160,43 @@ run_autograder <- function(test_cases,
   for (i in seq_along(test_cases)) {
     tc <- test_cases[[i]]
 
+    # -- Result-based interface (validate() / validate_text() output) ----------
+    if (!is.null(tc[["result"]])) {
+      res    <- tc[["result"]]
+      max_sc <- tc[["max_score"]] %||% 0
+
+      score_val <- if (!is.null(res$score) && !is.na(res$score)) {
+        round(res$score * max_sc, 2)
+      } else if (isTRUE(res$overall)) {
+        max_sc
+      } else {
+        0
+      }
+
+      outcome <- result_to_outcome(res)
+      output  <- if (outcome == "SUCCESS") {
+        "Test passed!\n"
+      } else {
+        fb_str <- if (!is.null(res$feedback) && nchar(res$feedback) > 0L)
+          paste0("\n\nFeedback: ", res$feedback)
+        else
+          ""
+        paste0(outcome, fb_str)
+      }
+
+      entry <- list(
+        name      = tc[["name"]],
+        score     = score_val,
+        max_score = max_sc,
+        output    = output
+      )
+      if (!is.null(tc[["visibility"]]) && tc[["visibility"]] != "visible")
+        entry[["visibility"]] <- tc[["visibility"]]
+      results[["tests"]][[i]] <- entry
+      next
+    }
+
+    # -- Legacy function-based interface ---------------------------------------
     ret <- tryCatch(
       do.call(tc[["fun"]], tc[["args"]]),
       error   = function(e) paste("Error:", conditionMessage(e)),

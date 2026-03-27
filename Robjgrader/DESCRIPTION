@@ -21,6 +21,8 @@ Imports:
     rlang,
     jsonlite
 Suggests:
+    httr2,
+    pdftools,
     ggplot2,
     fixest,
     lme4,

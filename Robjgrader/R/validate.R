@@ -333,9 +333,17 @@ validate <- function(
 #' @export
 print.robjgrader_result <- function(x, ...) {
   status <- if (is.na(x$overall)) "--" else if (x$overall) "PASS" else "FAIL"
+
+  score_str <- if (!is.null(x$score) && !is.na(x$score) &&
+                   x$object_type == "text") {
+    sprintf("  score: %.0f%%", x$score * 100)
+  } else {
+    ""
+  }
+
   cat(sprintf(
-    "robjgrader result: %s (%s)  [%s]\n\n",
-    x$object_name, x$object_class, status
+    "robjgrader result: %s (%s)  [%s]%s\n\n",
+    x$object_name, x$object_class, status, score_str
   ))
 
   if (length(x$checks) == 0L) {
@@ -344,8 +352,12 @@ print.robjgrader_result <- function(x, ...) {
   }
 
   for (chk in x$checks) {
-    mark <- if (chk$pass) "[+]" else "[-]"
+    mark <- if (is.na(chk$pass)) "[?]" else if (chk$pass) "[+]" else "[-]"
     cat(sprintf("  %s  %s\n", mark, chk$message))
+  }
+
+  if (!is.null(x$feedback) && nchar(x$feedback) > 0L) {
+    cat(sprintf("\n  Feedback: %s\n", x$feedback))
   }
 
   invisible(x)

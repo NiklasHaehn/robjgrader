@@ -14,7 +14,10 @@ model, and a formatted regression table.
 every analytical object a student’s script assigns or prints, and
 exposes a flexible validation interface that checks objects by name,
 type, or structural similarity against a reference solution — without
-requiring students to follow a fixed naming convention.
+requiring students to follow a fixed naming convention. Written answers
+can be graded via an LLM backend (Groq or any OpenAI-compatible
+endpoint), with optional per-student feedback that is constrained to be
+constructive, precise, and written in plain English.
 
 ### Installation
 
@@ -31,7 +34,7 @@ A typical autograder script has three stages:
 library(Robjgrader)
 
 # 1. Record all objects produced by the student's script
-records <- source_student_file("autograde.R")
+records <- source_student_file()
 
 # 2. Validate individual objects
 res_df <- validate(records, "clean_data",
@@ -55,17 +58,78 @@ run_autograder(test_cases)
 writes results to `/autograder/results/results.json` (Gradescope format)
 and prints a summary to the console.
 
+### Grading Written Answers
+
+Problem sets that include written interpretation questions can be graded
+via `validate_text()`, which sends the student’s answer to an
+OpenAI-compatible LLM endpoint (default: Groq). Pass a question and
+rubric and the grading prompt is built automatically:
+
+``` r
+answer <- find_student_text()          # auto-discovers the submission file
+
+res_text <- validate_text(
+  text      = answer,
+  question  = "Interpret the coefficient on gdp_pc in your regression.",
+  rubric    = c(
+    direction    = "Correctly identifies the sign of the coefficient.",
+    magnitude    = "Interprets the substantive size of the effect.",
+    significance = "Mentions statistical significance and its implications."
+  ),
+  reference = "solution_q3.txt",       # optional model answer for comparison
+  feedback  = TRUE                     # include per-student written feedback
+)
+```
+
+When `feedback = TRUE`, the LLM returns a short comment (max 3 sentences
+/ 200 words) that is included in the Gradescope output for incorrect
+answers. Feedback is constrained by prompt instructions to be
+constructive, precise, and in plain English — with no greetings,
+sign-offs, or filler phrases.
+
+Text results integrate directly into
+[`run_autograder()`](https://niklashaehn.github.io/robjgrader/reference/run_autograder.md)
+alongside object-based results, with partial credit derived from the
+normalized score returned by the LLM:
+
+``` r
+test_cases <- list(
+  list(name = "OLS model",      result = res_model, max_score = 30),
+  list(name = "Interpretation", result = res_text,  max_score = 20)
+)
+
+run_autograder(test_cases)
+```
+
 ### Key Functions
+
+| Function | Description |
+|----------|-------------|
+
+**Recording**
 
 | Function                                                                                             | Description                                                                                              |
 |:-----------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------|
 | [`record_script()`](https://niklashaehn.github.io/robjgrader/reference/record_script.md)             | Parse and evaluate a student script expression by expression, capturing all assigned and printed objects |
-| [`source_student_file()`](https://niklashaehn.github.io/robjgrader/reference/source_student_file.md) | Locate and record a student submission file automatically, excluding the calling script                  |
+| [`source_student_file()`](https://niklashaehn.github.io/robjgrader/reference/source_student_file.md) | Locate and record a student R submission automatically, excluding the calling script                     |
 | [`get_records()`](https://niklashaehn.github.io/robjgrader/reference/get_records.md)                 | Retrieve and filter recorded objects by type                                                             |
 | [`grab()`](https://niklashaehn.github.io/robjgrader/reference/grab.md)                               | Wrap a single object from the global environment into a one-element records list                         |
-| [`validate()`](https://niklashaehn.github.io/robjgrader/reference/validate.md)                       | Validate a recorded object by name, match criteria, or reference object                                  |
-| [`run_autograder()`](https://niklashaehn.github.io/robjgrader/reference/run_autograder.md)           | Execute a list of test cases and produce Gradescope-compatible output                                    |
-| [`result_to_outcome()`](https://niklashaehn.github.io/robjgrader/reference/result_to_outcome.md)     | Convert a validation result to a `"SUCCESS"` string or formatted failure message                         |
+
+**Validation**
+
+| Function                                                                       | Description                                                                                         |
+|:-------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------|
+| [`validate()`](https://niklashaehn.github.io/robjgrader/reference/validate.md) | Validate a recorded object by name, match criteria, or reference object                             |
+| `validate_text()`                                                              | Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback |
+| `find_student_text()`                                                          | Auto-discover a student text submission file in the working directory                               |
+| `read_student_text()`                                                          | Read a `.txt`, `.md`, or `.pdf` file into a character string                                        |
+
+**Running**
+
+| Function                                                                                         | Description                                                                      |
+|:-------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------|
+| [`run_autograder()`](https://niklashaehn.github.io/robjgrader/reference/run_autograder.md)       | Execute a list of test cases and produce Gradescope-compatible output            |
+| [`result_to_outcome()`](https://niklashaehn.github.io/robjgrader/reference/result_to_outcome.md) | Convert a validation result to a `"SUCCESS"` string or formatted failure message |
 
 ### Supported Object Types
 

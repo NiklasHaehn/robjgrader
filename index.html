@@ -54,7 +54,7 @@
 <h3 id="purpose">Purpose<a class="anchor" aria-label="anchor" href="#purpose"></a>
 </h3>
 <p>Automated grading of student R scripts requires two things: capturing what a student’s script produces, and checking whether those objects meet substantive expectations. Existing tools handle one or the other — but not in a way designed for the heterogeneous output of a political science methods course, where a single problem set might ask for a cleaned data frame, a <code>ggplot2</code> visualization, an OLS or fixed-effects model, and a formatted regression table.</p>
-<p><strong>Robjgrader</strong> provides a unified pipeline for this task. It records every analytical object a student’s script assigns or prints, and exposes a flexible validation interface that checks objects by name, type, or structural similarity against a reference solution — without requiring students to follow a fixed naming convention.</p>
+<p><strong>Robjgrader</strong> provides a unified pipeline for this task. It records every analytical object a student’s script assigns or prints, and exposes a flexible validation interface that checks objects by name, type, or structural similarity against a reference solution — without requiring students to follow a fixed naming convention. Written answers can be graded via an LLM backend (Groq or any OpenAI-compatible endpoint), with optional per-student feedback that is constrained to be constructive, precise, and written in plain English.</p>
 </div>
 <div class="section level3">
 <h3 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
@@ -71,7 +71,7 @@
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://niklashaehn.github.io/robjgrader">Robjgrader</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># 1. Record all objects produced by the student's script</span></span>
-<span><span class="va">records</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/source_student_file.html">source_student_file</a></span><span class="op">(</span><span class="st">"autograde.R"</span><span class="op">)</span></span>
+<span><span class="va">records</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/source_student_file.html">source_student_file</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># 2. Validate individual objects</span></span>
 <span><span class="va">res_df</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate.html">validate</a></span><span class="op">(</span><span class="va">records</span>, <span class="st">"clean_data"</span>,</span>
@@ -92,8 +92,44 @@
 <p><code><a href="reference/run_autograder.html">run_autograder()</a></code> writes results to <code>/autograder/results/results.json</code> (Gradescope format) and prints a summary to the console.</p>
 </div>
 <div class="section level3">
+<h3 id="grading-written-answers">Grading Written Answers<a class="anchor" aria-label="anchor" href="#grading-written-answers"></a>
+</h3>
+<p>Problem sets that include written interpretation questions can be graded via <code>validate_text()</code>, which sends the student’s answer to an OpenAI-compatible LLM endpoint (default: Groq). Pass a question and rubric and the grading prompt is built automatically:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">answer</span> <span class="op">&lt;-</span> <span class="fu">find_student_text</span><span class="op">(</span><span class="op">)</span>          <span class="co"># auto-discovers the submission file</span></span>
+<span></span>
+<span><span class="va">res_text</span> <span class="op">&lt;-</span> <span class="fu">validate_text</span><span class="op">(</span></span>
+<span>  text      <span class="op">=</span> <span class="va">answer</span>,</span>
+<span>  question  <span class="op">=</span> <span class="st">"Interpret the coefficient on gdp_pc in your regression."</span>,</span>
+<span>  rubric    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    direction    <span class="op">=</span> <span class="st">"Correctly identifies the sign of the coefficient."</span>,</span>
+<span>    magnitude    <span class="op">=</span> <span class="st">"Interprets the substantive size of the effect."</span>,</span>
+<span>    significance <span class="op">=</span> <span class="st">"Mentions statistical significance and its implications."</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  reference <span class="op">=</span> <span class="st">"solution_q3.txt"</span>,       <span class="co"># optional model answer for comparison</span></span>
+<span>  feedback  <span class="op">=</span> <span class="cn">TRUE</span>                     <span class="co"># include per-student written feedback</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>When <code>feedback = TRUE</code>, the LLM returns a short comment (max 3 sentences / 200 words) that is included in the Gradescope output for incorrect answers. Feedback is constrained by prompt instructions to be constructive, precise, and in plain English — with no greetings, sign-offs, or filler phrases.</p>
+<p>Text results integrate directly into <code><a href="reference/run_autograder.html">run_autograder()</a></code> alongside object-based results, with partial credit derived from the normalized score returned by the LLM:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">test_cases</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"OLS model"</span>,      result <span class="op">=</span> <span class="va">res_model</span>, max_score <span class="op">=</span> <span class="fl">30</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"Interpretation"</span>, result <span class="op">=</span> <span class="va">res_text</span>,  max_score <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/run_autograder.html">run_autograder</a></span><span class="op">(</span><span class="va">test_cases</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
 <h3 id="key-functions">Key Functions<a class="anchor" aria-label="anchor" href="#key-functions"></a>
 </h3>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Function</th>
+<th align="left">Description</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+<p><strong>Recording</strong></p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -110,7 +146,7 @@
 </tr>
 <tr class="even">
 <td align="left"><code><a href="reference/source_student_file.html">source_student_file()</a></code></td>
-<td align="left">Locate and record a student submission file automatically, excluding the calling script</td>
+<td align="left">Locate and record a student R submission automatically, excluding the calling script</td>
 </tr>
 <tr class="odd">
 <td align="left"><code><a href="reference/get_records.html">get_records()</a></code></td>
@@ -120,15 +156,53 @@
 <td align="left"><code><a href="reference/grab.html">grab()</a></code></td>
 <td align="left">Wrap a single object from the global environment into a one-element records list</td>
 </tr>
+</tbody>
+</table>
+<p><strong>Validation</strong></p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Function</th>
+<th align="left">Description</th>
+</tr></thead>
+<tbody>
 <tr class="odd">
 <td align="left"><code><a href="reference/validate.html">validate()</a></code></td>
 <td align="left">Validate a recorded object by name, match criteria, or reference object</td>
 </tr>
 <tr class="even">
+<td align="left"><code>validate_text()</code></td>
+<td align="left">Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>find_student_text()</code></td>
+<td align="left">Auto-discover a student text submission file in the working directory</td>
+</tr>
+<tr class="even">
+<td align="left"><code>read_student_text()</code></td>
+<td align="left">Read a <code>.txt</code>, <code>.md</code>, or <code>.pdf</code> file into a character string</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Running</strong></p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Function</th>
+<th align="left">Description</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
 <td align="left"><code><a href="reference/run_autograder.html">run_autograder()</a></code></td>
 <td align="left">Execute a list of test cases and produce Gradescope-compatible output</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td align="left"><code><a href="reference/result_to_outcome.html">result_to_outcome()</a></code></td>
 <td align="left">Convert a validation result to a <code>"SUCCESS"</code> string or formatted failure message</td>
 </tr>

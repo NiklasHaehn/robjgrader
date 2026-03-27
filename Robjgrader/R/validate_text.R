@@ -263,8 +263,10 @@ validate_text <- function(
 
   feedback_field <- if (isTRUE(feedback)) {
     paste0(
-      "\n  \"feedback\": \"<constructive written feedback, ",
-      "max 3 sentences and 200 words>\","
+      "\n  \"feedback\": \"<written feedback for the student.",
+      " Rules: constructive and precise; plain English; max 3 sentences and 200 words;",
+      " no greetings, sign-offs, or filler phrases; do not mention AI, language models,",
+      " or automated grading; start directly with the substantive comment>\","
     )
   } else {
     ""

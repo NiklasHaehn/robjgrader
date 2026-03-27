@@ -6,6 +6,7 @@
 
 # Package build artefacts
 Robjgrader/*.tar.gz
+Robjgrader/..Rcheck/
 Robjgrader/src/*.o
 Robjgrader/src/*.so
 Robjgrader/src/*.dll

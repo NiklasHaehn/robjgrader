@@ -25,11 +25,8 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: Robjgrader
-          extra-packages: any::pkgdown
+          extra-packages: any::pkgdown, local::.
           needs: website
-
-      - name: Install package
-        run: R CMD INSTALL Robjgrader
 
       - name: Build pkgdown site
         run: pkgdown::build_site_github_pages(pkg = "Robjgrader", new_process = FALSE, clean = TRUE)

@@ -18,6 +18,7 @@ navbar:
     github:
       icon: fab fa-github fa-lg
       href: https://github.com/NiklasHaehn/robjgrader
+      aria-label: GitHub
 
 reference:
   - title: Recording
@@ -34,6 +35,9 @@ reference:
     desc: Validate recorded objects against expectations.
     contents:
       - validate
+      - validate_text
+      - find_student_text
+      - read_student_text
 
   - title: Autograder
     desc: Run test cases and produce Gradescope-compatible output.

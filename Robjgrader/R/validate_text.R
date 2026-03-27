@@ -28,6 +28,52 @@ read_student_text <- function(path) {
 }
 
 
+#' Find and read a student text submission automatically
+#'
+#' Scans the current working directory for text files (\code{.txt},
+#' \code{.md}, \code{.pdf}), excludes the calling autograder script, and
+#' returns the content of the first matching file as a character string.
+#' Mirrors the auto-discovery logic of \code{source_student_file()}.
+#'
+#' @param pattern       Optional regex to filter filenames (e.g.
+#'   \code{"interpretation"}). When \code{NULL}, all supported text formats
+#'   are considered.
+#' @param autograder_name Character or \code{NULL}. Additional filename(s) to
+#'   exclude beyond the auto-detected calling script.
+#'
+#' @return A single character string with the file contents.
+#' @export
+find_student_text <- function(pattern = NULL, autograder_name = NULL) {
+  calling <- .calling_file()
+  exclude  <- unique(c(
+    if (!is.null(calling))         basename(calling),
+    if (!is.null(autograder_name)) autograder_name
+  ))
+
+  file_pattern <- if (!is.null(pattern)) {
+    pattern
+  } else {
+    "\\.(txt|md|rmd|qmd|pdf)$"
+  }
+
+  candidates <- list.files(pattern = file_pattern, full.names = TRUE,
+                            ignore.case = TRUE)
+  candidates <- candidates[!basename(candidates) %in% exclude]
+
+  if (length(candidates) == 0L)
+    stop("No student text file found in the current directory.")
+  if (length(candidates) > 1L)
+    warning(sprintf(
+      "%d text files found; using the first: %s",
+      length(candidates), basename(candidates[[1L]])
+    ), call. = FALSE)
+
+  path <- candidates[[1L]]
+  message(sprintf("Reading student text: %s", basename(path)))
+  read_student_text(path)
+}
+
+
 #' Validate a student text answer using an LLM
 #'
 #' Sends a student's written answer to an OpenAI-compatible LLM endpoint for
@@ -65,6 +111,12 @@ read_student_text <- function(path) {
 #' @param rubric    Named character vector or named list. Each element is a
 #'   grading criterion; its name is the criterion label and its value is the
 #'   description of what a passing answer must demonstrate.
+#' @param reference Character or file path. An optional model answer used as a
+#'   grading standard.  If a valid file path is supplied, the file is read via
+#'   \code{read_student_text()}.  When provided, the LLM compares the student
+#'   answer against the reference rather than grading against abstract criteria
+#'   alone.  Only used in Mode B (\code{question}/\code{rubric}); ignored in
+#'   Mode A.
 #' @param name      Character. Label for this result, shown in console output
 #'   and Gradescope.
 #' @param feedback  Logical. If \code{TRUE}, the LLM is asked to provide
@@ -87,6 +139,7 @@ validate_text <- function(
   prompt    = NULL,
   question  = NULL,
   rubric    = NULL,
+  reference = NULL,
   name      = "text",
   feedback  = FALSE,
   model     = "llama-3.3-70b-versatile",
@@ -101,8 +154,19 @@ validate_text <- function(
   if (nchar(api_key) == 0L)
     stop("No API key found. Set GROQ_API_KEY or pass 'api_key' explicitly.")
 
+  ref_text <- if (!is.null(reference)) {
+    if (is.character(reference) && length(reference) == 1L &&
+        file.exists(reference)) {
+      read_student_text(reference)
+    } else {
+      as.character(reference)
+    }
+  } else {
+    NULL
+  }
+
   sys_prompt <- if (!is.null(prompt)) prompt else
-    .build_text_prompt(question, rubric, feedback)
+    .build_text_prompt(question, rubric, feedback, ref_text)
 
   messages <- list(
     list(role = "system", content = sys_prompt),
@@ -179,7 +243,7 @@ validate_text <- function(
 
 # -- Internal helpers ----------------------------------------------------------
 
-.build_text_prompt <- function(question, rubric, feedback) {
+.build_text_prompt <- function(question, rubric, feedback, reference = NULL) {
   criteria_block <- paste(
     mapply(
       function(nm, desc) sprintf("- %s: %s", nm, desc),
@@ -187,6 +251,15 @@ validate_text <- function(
     ),
     collapse = "\n"
   )
+
+  reference_block <- if (!is.null(reference) && nchar(trimws(reference)) > 0L) {
+    sprintf(
+      "\nREFERENCE ANSWER (use this as the standard for comparison):\n%s\n",
+      reference
+    )
+  } else {
+    ""
+  }
 
   feedback_field <- if (isTRUE(feedback)) {
     paste0(
@@ -201,7 +274,8 @@ validate_text <- function(
     paste0(
       "You are a grader for a political science methods course.\n\n",
       "QUESTION:\n%s\n\n",
-      "GRADING CRITERIA (each must be assessed independently):\n%s\n\n",
+      "GRADING CRITERIA (each must be assessed independently):\n%s\n",
+      "%s\n",
       "Evaluate the student's answer against each criterion. ",
       "Return ONLY a JSON object with this exact structure -- no prose, ",
       "no markdown code fences:\n",
@@ -215,7 +289,7 @@ validate_text <- function(
       "}\n\n",
       "Return ONLY the JSON object."
     ),
-    question, criteria_block, feedback_field
+    question, criteria_block, reference_block, feedback_field
   )
 }
 

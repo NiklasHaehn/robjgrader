@@ -74,6 +74,139 @@ find_student_text <- function(pattern = NULL, autograder_name = NULL) {
 }
 
 
+#' Split a student text submission into sections
+#'
+#' Splits a multi-question text submission into individual sections so that
+#' each question can be graded independently via \code{validate_text()}.
+#' Section boundaries are detected automatically based on the content format:
+#'
+#' \describe{
+#'   \item{Markdown (\code{.md})}{Lines starting with one to three \code{#}
+#'     characters (\code{# Q1}, \code{## Part 2}, etc.).}
+#'   \item{Plain text / PDF (\code{.txt}, \code{.pdf})}{Lines matching common
+#'     question prefixes: \code{Q1:}, \code{Question 1.}, \code{1.},
+#'     \code{1)}, \code{Part 1}, \code{Section 1}.  When no prefix pattern
+#'     is found, the text is split on double blank lines.}
+#' }
+#'
+#' @param text       Character. Full text from \code{read_student_text()} or
+#'   \code{find_student_text()}.
+#' @param n_sections Integer or \code{NULL}. Expected number of sections.
+#'   Used as a limit when falling back to blank-line splitting.
+#' @param format     One of \code{"auto"} (default), \code{"markdown"}, or
+#'   \code{"plain"}.  \code{"auto"} detects the format from the content.
+#'
+#' @return A named character vector.  Names are the detected section headings
+#'   (e.g. \code{"Q1: Interpretation"}); values are the section bodies.
+#'   Unnamed sections are labelled \code{"Section 1"}, \code{"Section 2"},
+#'   etc.
+#' @export
+split_student_text <- function(text, n_sections = NULL, format = "auto") {
+  fmt <- if (format == "auto") .detect_text_format(text) else format
+
+  sections <- switch(fmt,
+    markdown = .split_markdown(text),
+    plain    = .split_plain(text, n_sections),
+    .split_plain(text, n_sections)
+  )
+
+  if (length(sections) == 0L) {
+    warning("No section boundaries detected; returning full text as one section.",
+            call. = FALSE)
+    return(stats::setNames(text, "Section 1"))
+  }
+
+  sections
+}
+
+
+# -- Section-detection helpers -------------------------------------------------
+
+.detect_text_format <- function(text) {
+  if (grepl("(?m)^#{1,3}\\s", text, perl = TRUE)) "markdown" else "plain"
+}
+
+.split_markdown <- function(text) {
+  lines    <- strsplit(text, "\n")[[1L]]
+  headings <- grep("^#{1,3}\\s", lines, perl = TRUE)
+  if (length(headings) == 0L) return(character(0L))
+
+  ends <- c(headings[-1L] - 1L, length(lines))
+
+  result <- character(length(headings))
+  nms    <- character(length(headings))
+  for (i in seq_along(headings)) {
+    h       <- headings[i]
+    nms[i]  <- trimws(sub("^#{1,3}\\s*", "", lines[h]))
+    body    <- lines[(h + 1L):ends[i]]
+    result[i] <- trimws(paste(body, collapse = "\n"))
+  }
+  stats::setNames(result, nms)
+}
+
+.split_plain <- function(text, n_sections = NULL) {
+  lines <- strsplit(text, "\n")[[1L]]
+
+  # Try common numbered/labelled heading patterns
+  patterns <- c(
+    "^(Q|Question|Part|Section|Task|Problem)\\s*[0-9]+[.:)]",
+    "^[0-9]+[.)\\s]"
+  )
+  heading_lines <- integer(0L)
+  for (pat in patterns) {
+    hits <- grep(pat, lines, perl = TRUE, ignore.case = TRUE)
+    if (length(hits) > 0L) { heading_lines <- hits; break }
+  }
+
+  # Fallback: double blank lines
+  if (length(heading_lines) == 0L) {
+    chunks <- strsplit(text, "\n{2,}")[[1L]]
+    chunks <- trimws(chunks)
+    chunks <- chunks[nchar(chunks) > 0L]
+    if (!is.null(n_sections) && length(chunks) > n_sections)
+      chunks <- chunks[seq_len(n_sections)]
+    return(stats::setNames(chunks, paste("Section", seq_along(chunks))))
+  }
+
+  ends <- c(heading_lines[-1L] - 1L, length(lines))
+
+  result <- character(length(heading_lines))
+  nms    <- character(length(heading_lines))
+  for (i in seq_along(heading_lines)) {
+    h         <- heading_lines[i]
+    nms[i]    <- trimws(lines[h])
+    body      <- if (h < ends[i]) lines[(h + 1L):ends[i]] else character(0L)
+    result[i] <- trimws(paste(body, collapse = "\n"))
+  }
+  stats::setNames(result, nms)
+}
+
+.extract_section <- function(sections, section, name) {
+  if (is.numeric(section)) {
+    idx <- as.integer(section)
+    if (idx < 1L || idx > length(sections))
+      stop(sprintf("Section index %d out of range (%d section(s) found): %s",
+                   idx, length(sections),
+                   paste(names(sections), collapse = ", ")))
+    return(sections[[idx]])
+  }
+
+  nms   <- names(sections)
+  lower <- tolower(nms)
+  query <- tolower(as.character(section))
+
+  exact <- which(lower == query)
+  if (length(exact) > 0L) return(sections[[exact[1L]]])
+
+  partial <- which(grepl(query, lower, fixed = TRUE) |
+                   grepl(lower,  query, fixed = TRUE))
+  if (length(partial) > 0L) return(sections[[partial[1L]]])
+
+  stop(sprintf("Section '%s' not found. Available sections: %s",
+               section, paste(nms, collapse = ", ")))
+}
+
+
 #' Validate a student text answer using an LLM
 #'
 #' Sends a student's written answer to an OpenAI-compatible LLM endpoint for
@@ -111,6 +244,15 @@ find_student_text <- function(pattern = NULL, autograder_name = NULL) {
 #' @param rubric    Named character vector or named list. Each element is a
 #'   grading criterion; its name is the criterion label and its value is the
 #'   description of what a passing answer must demonstrate.
+#' @param section   Character or integer. When the submission contains multiple
+#'   questions, identifies which section to grade.  A character value is
+#'   matched against section headings (case-insensitive, partial match
+#'   allowed); an integer selects by position.  When \code{NULL} (default),
+#'   the full text is graded without splitting.
+#' @param n_sections Integer or \code{NULL}. Total number of questions in the
+#'   submission.  Used as a hint by \code{split_student_text()} when no
+#'   heading patterns are found (limits blank-line splitting to the first
+#'   \code{n_sections} chunks).
 #' @param reference Character or file path. An optional model answer used as a
 #'   grading standard.  If a valid file path is supplied, the file is read via
 #'   \code{read_student_text()}.  When provided, the LLM compares the student
@@ -141,16 +283,18 @@ find_student_text <- function(pattern = NULL, autograder_name = NULL) {
 #' @export
 validate_text <- function(
   text,
-  prompt    = NULL,
-  question  = NULL,
-  rubric    = NULL,
-  reference = NULL,
-  name      = "text",
-  feedback  = FALSE,
-  model     = "llama-3.3-70b-versatile",
-  base_url  = "https://api.groq.com/openai/v1",
-  api_key   = Sys.getenv("GROQ_API_KEY"),
-  max_retry = 3L
+  section    = NULL,
+  n_sections = NULL,
+  prompt     = NULL,
+  question   = NULL,
+  rubric     = NULL,
+  reference  = NULL,
+  name       = "text",
+  feedback   = FALSE,
+  model      = "llama-3.3-70b-versatile",
+  base_url   = "https://api.groq.com/openai/v1",
+  api_key    = Sys.getenv("GROQ_API_KEY"),
+  max_retry  = 3L
 ) {
   if (is.null(prompt) && (is.null(question) || is.null(rubric)))
     stop("Provide either 'prompt' (Mode A) or both 'question' and 'rubric' (Mode B).")
@@ -158,6 +302,11 @@ validate_text <- function(
     stop("'prompt' and 'question'/'rubric' are mutually exclusive.")
   if (nchar(api_key) == 0L)
     stop("No API key found. Set GROQ_API_KEY or pass 'api_key' explicitly.")
+
+  if (!is.null(section)) {
+    sections <- split_student_text(text, n_sections = n_sections)
+    text     <- .extract_section(sections, section, name)
+  }
 
   ref_text <- if (!is.null(reference)) {
     if (is.character(reference) && length(reference) == 1L &&
@@ -310,7 +459,7 @@ validate_text <- function(
     httr2::req_body_json(list(
       model       = model,
       messages    = messages,
-      temperature = 0.1,
+      temperature = 0,
       max_tokens  = 600L
     )) |>
     httr2::req_error(is_error = function(resp) FALSE) |>

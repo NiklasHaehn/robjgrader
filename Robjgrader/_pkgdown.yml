@@ -36,6 +36,7 @@ reference:
     contents:
       - validate
       - validate_text
+      - split_student_text
       - find_student_text
       - read_student_text
 

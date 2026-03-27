@@ -6,6 +6,8 @@
 \usage{
 validate_text(
   text,
+  section = NULL,
+  n_sections = NULL,
   prompt = NULL,
   question = NULL,
   rubric = NULL,
@@ -21,6 +23,17 @@ validate_text(
 \arguments{
 \item{text}{Character. The student's answer, typically from
 \code{read_student_text()}.}
+
+\item{section}{Character or integer. When the submission contains multiple
+questions, identifies which section to grade.  A character value is
+matched against section headings (case-insensitive, partial match
+allowed); an integer selects by position.  When \code{NULL} (default),
+the full text is graded without splitting.}
+
+\item{n_sections}{Integer or \code{NULL}. Total number of questions in the
+submission.  Used as a hint by \code{split_student_text()} when no
+heading patterns are found (limits blank-line splitting to the first
+\code{n_sections} chunks).}
 
 \item{prompt}{Character. Full system prompt (Mode A). Mutually exclusive
 with \code{question} and \code{rubric}.}
@@ -42,8 +55,13 @@ Mode A.}
 and Gradescope.}
 
 \item{feedback}{Logical. If \code{TRUE}, the LLM is asked to provide
-written feedback (max 3 sentences / 200 words) stored in
-\code{result$feedback}.}
+written feedback stored in \code{result$feedback} and included in the
+Gradescope output when the answer is not fully correct.  The feedback is
+constrained by prompt instructions: it must be constructive and precise,
+written in plain English, at most 3 sentences and 200 words, free of
+greetings or sign-offs, and must start directly with the substantive
+comment.  No reference to automated grading or language models is
+permitted.}
 
 \item{model}{Character. Model identifier passed to the API.}
 

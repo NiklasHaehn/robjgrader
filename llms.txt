@@ -175,6 +175,8 @@ Validate recorded objects against expectations.
   : Validate a recorded object
 - [`validate_text()`](https://niklashaehn.github.io/robjgrader/reference/validate_text.md)
   : Validate a student text answer using an LLM
+- [`split_student_text()`](https://niklashaehn.github.io/robjgrader/reference/split_student_text.md)
+  : Split a student text submission into sections
 - [`find_student_text()`](https://niklashaehn.github.io/robjgrader/reference/find_student_text.md)
   : Find and read a student text submission automatically
 - [`read_student_text()`](https://niklashaehn.github.io/robjgrader/reference/read_student_text.md)

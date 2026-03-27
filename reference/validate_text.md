@@ -8,6 +8,8 @@ for automated grading. Supports two modes:
 ``` r
 validate_text(
   text,
+  section = NULL,
+  n_sections = NULL,
   prompt = NULL,
   question = NULL,
   rubric = NULL,
@@ -27,6 +29,22 @@ validate_text(
 
   Character. The student's answer, typically from
   [`read_student_text()`](https://niklashaehn.github.io/robjgrader/reference/read_student_text.md).
+
+- section:
+
+  Character or integer. When the submission contains multiple questions,
+  identifies which section to grade. A character value is matched
+  against section headings (case-insensitive, partial match allowed); an
+  integer selects by position. When `NULL` (default), the full text is
+  graded without splitting.
+
+- n_sections:
+
+  Integer or `NULL`. Total number of questions in the submission. Used
+  as a hint by
+  [`split_student_text()`](https://niklashaehn.github.io/robjgrader/reference/split_student_text.md)
+  when no heading patterns are found (limits blank-line splitting to the
+  first `n_sections` chunks).
 
 - prompt:
 
@@ -59,8 +77,13 @@ validate_text(
 
 - feedback:
 
-  Logical. If `TRUE`, the LLM is asked to provide written feedback (max
-  3 sentences / 200 words) stored in `result$feedback`.
+  Logical. If `TRUE`, the LLM is asked to provide written feedback
+  stored in `result$feedback` and included in the Gradescope output when
+  the answer is not fully correct. The feedback is constrained by prompt
+  instructions: it must be constructive and precise, written in plain
+  English, at most 3 sentences and 200 words, free of greetings or
+  sign-offs, and must start directly with the substantive comment. No
+  reference to automated grading or language models is permitted.
 
 - model:
 

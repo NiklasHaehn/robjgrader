@@ -41,6 +41,8 @@ automated grading.  Supports two modes:</p>
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">validate_text</span><span class="op">(</span></span>
 <span>  <span class="va">text</span>,</span>
+<span>  section <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  n_sections <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  prompt <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  question <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  rubric <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -61,6 +63,21 @@ automated grading.  Supports two modes:</p>
 <dl><dt id="arg-text">text<a class="anchor" aria-label="anchor" href="#arg-text"></a></dt>
 <dd><p>Character. The student's answer, typically from
 <code><a href="read_student_text.html">read_student_text()</a></code>.</p></dd>
+
+
+<dt id="arg-section">section<a class="anchor" aria-label="anchor" href="#arg-section"></a></dt>
+<dd><p>Character or integer. When the submission contains multiple
+questions, identifies which section to grade.  A character value is
+matched against section headings (case-insensitive, partial match
+allowed); an integer selects by position.  When <code>NULL</code> (default),
+the full text is graded without splitting.</p></dd>
+
+
+<dt id="arg-n-sections">n_sections<a class="anchor" aria-label="anchor" href="#arg-n-sections"></a></dt>
+<dd><p>Integer or <code>NULL</code>. Total number of questions in the
+submission.  Used as a hint by <code><a href="split_student_text.html">split_student_text()</a></code> when no
+heading patterns are found (limits blank-line splitting to the first
+<code>n_sections</code> chunks).</p></dd>
 
 
 <dt id="arg-prompt">prompt<a class="anchor" aria-label="anchor" href="#arg-prompt"></a></dt>
@@ -94,8 +111,13 @@ and Gradescope.</p></dd>
 
 <dt id="arg-feedback">feedback<a class="anchor" aria-label="anchor" href="#arg-feedback"></a></dt>
 <dd><p>Logical. If <code>TRUE</code>, the LLM is asked to provide
-written feedback (max 3 sentences / 200 words) stored in
-<code>result$feedback</code>.</p></dd>
+written feedback stored in <code>result$feedback</code> and included in the
+Gradescope output when the answer is not fully correct.  The feedback is
+constrained by prompt instructions: it must be constructive and precise,
+written in plain English, at most 3 sentences and 200 words, free of
+greetings or sign-offs, and must start directly with the substantive
+comment.  No reference to automated grading or language models is
+permitted.</p></dd>
 
 
 <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>

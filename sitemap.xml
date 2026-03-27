@@ -4,9 +4,11 @@
 <url><loc>https://niklashaehn.github.io/robjgrader/authors.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/index.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/ag_submission_test.html</loc></url>
+<url><loc>https://niklashaehn.github.io/robjgrader/reference/find_student_text.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/get_records.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/grab.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/index.html</loc></url>
+<url><loc>https://niklashaehn.github.io/robjgrader/reference/read_student_text.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/record_script.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/record_start.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/record_stop.html</loc></url>
@@ -14,5 +16,6 @@
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/run_autograder.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/source_student_file.html</loc></url>
 <url><loc>https://niklashaehn.github.io/robjgrader/reference/validate.html</loc></url>
+<url><loc>https://niklashaehn.github.io/robjgrader/reference/validate_text.html</loc></url>
 </urlset>
 

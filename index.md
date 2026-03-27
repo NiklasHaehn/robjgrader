@@ -61,9 +61,11 @@ and prints a summary to the console.
 ### Grading Written Answers
 
 Problem sets that include written interpretation questions can be graded
-via `validate_text()`, which sends the student’s answer to an
-OpenAI-compatible LLM endpoint (default: Groq). Pass a question and
-rubric and the grading prompt is built automatically:
+via
+[`validate_text()`](https://niklashaehn.github.io/robjgrader/reference/validate_text.md),
+which sends the student’s answer to an OpenAI-compatible LLM endpoint
+(default: Groq). Pass a question and rubric and the grading prompt is
+built automatically:
 
 ``` r
 answer <- find_student_text()          # auto-discovers the submission file
@@ -114,12 +116,12 @@ run_autograder(test_cases)
 
 **Validation**
 
-| Function                                                                       | Description                                                                                         |
-|:-------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------|
-| [`validate()`](https://niklashaehn.github.io/robjgrader/reference/validate.md) | Validate a recorded object by name, match criteria, or reference object                             |
-| `validate_text()`                                                              | Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback |
-| `find_student_text()`                                                          | Auto-discover a student text submission file in the working directory                               |
-| `read_student_text()`                                                          | Read a `.txt`, `.md`, or `.pdf` file into a character string                                        |
+| Function                                                                                         | Description                                                                                         |
+|:-------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------|
+| [`validate()`](https://niklashaehn.github.io/robjgrader/reference/validate.md)                   | Validate a recorded object by name, match criteria, or reference object                             |
+| [`validate_text()`](https://niklashaehn.github.io/robjgrader/reference/validate_text.md)         | Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback |
+| [`find_student_text()`](https://niklashaehn.github.io/robjgrader/reference/find_student_text.md) | Auto-discover a student text submission file in the working directory                               |
+| [`read_student_text()`](https://niklashaehn.github.io/robjgrader/reference/read_student_text.md) | Read a `.txt`, `.md`, or `.pdf` file into a character string                                        |
 
 **Running**
 

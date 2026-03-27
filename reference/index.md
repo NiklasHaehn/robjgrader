@@ -23,6 +23,12 @@ Validate recorded objects against expectations.
 
 - [`validate()`](https://niklashaehn.github.io/robjgrader/reference/validate.md)
   : Validate a recorded object
+- [`validate_text()`](https://niklashaehn.github.io/robjgrader/reference/validate_text.md)
+  : Validate a student text answer using an LLM
+- [`find_student_text()`](https://niklashaehn.github.io/robjgrader/reference/find_student_text.md)
+  : Find and read a student text submission automatically
+- [`read_student_text()`](https://niklashaehn.github.io/robjgrader/reference/read_student_text.md)
+  : Read a student text submission
 
 ## Autograder
 

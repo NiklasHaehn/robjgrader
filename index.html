@@ -37,7 +37,7 @@
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
       </ul>
 <ul class="navbar-nav">
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/NiklasHaehn/robjgrader"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/NiklasHaehn/robjgrader" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
 
@@ -94,11 +94,11 @@
 <div class="section level3">
 <h3 id="grading-written-answers">Grading Written Answers<a class="anchor" aria-label="anchor" href="#grading-written-answers"></a>
 </h3>
-<p>Problem sets that include written interpretation questions can be graded via <code>validate_text()</code>, which sends the student’s answer to an OpenAI-compatible LLM endpoint (default: Groq). Pass a question and rubric and the grading prompt is built automatically:</p>
+<p>Problem sets that include written interpretation questions can be graded via <code><a href="reference/validate_text.html">validate_text()</a></code>, which sends the student’s answer to an OpenAI-compatible LLM endpoint (default: Groq). Pass a question and rubric and the grading prompt is built automatically:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">answer</span> <span class="op">&lt;-</span> <span class="fu">find_student_text</span><span class="op">(</span><span class="op">)</span>          <span class="co"># auto-discovers the submission file</span></span>
+<code class="sourceCode R"><span><span class="va">answer</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/find_student_text.html">find_student_text</a></span><span class="op">(</span><span class="op">)</span>          <span class="co"># auto-discovers the submission file</span></span>
 <span></span>
-<span><span class="va">res_text</span> <span class="op">&lt;-</span> <span class="fu">validate_text</span><span class="op">(</span></span>
+<span><span class="va">res_text</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate_text.html">validate_text</a></span><span class="op">(</span></span>
 <span>  text      <span class="op">=</span> <span class="va">answer</span>,</span>
 <span>  question  <span class="op">=</span> <span class="st">"Interpret the coefficient on gdp_pc in your regression."</span>,</span>
 <span>  rubric    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -167,15 +167,15 @@
 <td align="left">Validate a recorded object by name, match criteria, or reference object</td>
 </tr>
 <tr class="even">
-<td align="left"><code>validate_text()</code></td>
+<td align="left"><code><a href="reference/validate_text.html">validate_text()</a></code></td>
 <td align="left">Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback</td>
 </tr>
 <tr class="odd">
-<td align="left"><code>find_student_text()</code></td>
+<td align="left"><code><a href="reference/find_student_text.html">find_student_text()</a></code></td>
 <td align="left">Auto-discover a student text submission file in the working directory</td>
 </tr>
 <tr class="even">
-<td align="left"><code>read_student_text()</code></td>
+<td align="left"><code><a href="reference/read_student_text.html">read_student_text()</a></code></td>
 <td align="left">Read a <code>.txt</code>, <code>.md</code>, or <code>.pdf</code> file into a character string</td>
 </tr>
 </tbody>

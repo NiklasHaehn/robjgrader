@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+# Copy student submission into source directory
+cp -a submission/. source/
+
+cd source
+
+# Run autograder
+# Tip: replace the local script with a wget call to avoid rebuilding the
+# Docker image every time you update autograde.R:
+#   wget -q https://your-server.com/autograde.R
+Rscript autograde.R

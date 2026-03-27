@@ -12,15 +12,34 @@
 #' Start recording analytical objects
 #'
 #' Attaches a task callback that intercepts top-level assignments, visible
-#' returns, and explicit print() calls for supported object classes.
+#' returns, and explicit \code{print()} calls in the current R session.
+#' Every captured object is stored internally and can be retrieved with
+#' \code{get_records()}.
 #'
-#' @param record_df      Record data frames and tibbles. Default TRUE.
-#' @param record_ggplot  Record ggplot objects. Default TRUE.
-#' @param record_model   Record model objects (lm, glm, fixest). Default TRUE.
-#' @param record_table   Record table objects (gt, tinytable, flextable,
-#'   huxtable). Default TRUE.
+#' @details
+#' \code{record_start()} / \code{record_stop()} are designed for
+#' \strong{interactive use at the REPL}.  They rely on
+#' \code{addTaskCallback()}, which is only triggered by top-level expressions
+#' typed directly into the console.  If you need to record objects produced
+#' by a script file, use \code{record_script()} or
+#' \code{source_student_file()} instead -- these evaluate each expression
+#' individually and call the recorder callback directly, bypassing the
+#' task-callback limitation.
 #'
-#' @return Invisibly NULL. Called for its side effect.
+#' Only one recording can be active at a time.  Calling \code{record_start()}
+#' while a recording is already active emits a warning and returns without
+#' resetting the existing session.
+#'
+#' @param record_df      Record data frames and tibbles. Default \code{TRUE}.
+#' @param record_ggplot  Record \pkg{ggplot2} objects. Default \code{TRUE}.
+#' @param record_model   Record model objects (\code{lm}, \code{glm},
+#'   \code{fixest}, \code{lmerMod}, \code{glmerMod}). Default \code{TRUE}.
+#' @param record_table   Record table objects (\pkg{gt}, \pkg{tinytable},
+#'   \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.
+#'
+#' @return Invisibly \code{NULL}. Called for its side effect.
+#' @seealso \code{\link{record_stop}}, \code{\link{get_records}},
+#'   \code{\link{record_script}}, \code{\link{source_student_file}}
 #' @export
 record_start <- function(
   record_df     = TRUE,
@@ -52,9 +71,13 @@ record_start <- function(
 
 #' Stop recording and summarise captured objects
 #'
-#' Removes the task callback installed by \code{record_start()}.
+#' Removes the task callback installed by \code{record_start()} and prints
+#' the number of objects captured.  The records remain accessible via
+#' \code{get_records()} until the next \code{record_start()} call clears
+#' them.
 #'
-#' @return Invisibly NULL. Called for its side effect.
+#' @return Invisibly \code{NULL}. Called for its side effect.
+#' @seealso \code{\link{record_start}}, \code{\link{get_records}}
 #' @export
 record_stop <- function() {
   if (!.recorder_env$active) {
@@ -73,8 +96,25 @@ record_stop <- function() {
 
 #' Retrieve recorded objects
 #'
-#' Returns a list of recorded events. Each element contains event metadata
-#' and the captured object under \code{$object}.
+#' Returns all objects captured since the last \code{record_start()} or
+#' \code{record_script()} call, optionally filtered by type or variable name.
+#' Each element of the returned list is a record entry with the following
+#' fields:
+#'
+#' \describe{
+#'   \item{\code{event_id}}{Integer. Sequential capture index.}
+#'   \item{\code{event_type}}{One of \code{"assignment"},
+#'     \code{"visible_return"}, \code{"print_call"}, or
+#'     \code{"invisible_return"}.}
+#'   \item{\code{object_name}}{Character or \code{NULL}. Variable name from
+#'     the assignment LHS; \code{NULL} for anonymous expressions.}
+#'   \item{\code{object_type}}{One of \code{"df"}, \code{"ggplot"},
+#'     \code{"model"}, \code{"table"}.}
+#'   \item{\code{object_class}}{First element of \code{class(object)}.}
+#'   \item{\code{expr_text}}{Deparsed source expression (single line).}
+#'   \item{\code{timestamp}}{\code{POSIXct} time of capture.}
+#'   \item{\code{object}}{The captured R object.}
+#' }
 #'
 #' @param type  Character vector of object types to include. One or more of
 #'   \code{"df"}, \code{"ggplot"}, \code{"model"}, \code{"table"}.
@@ -83,8 +123,9 @@ record_stop <- function() {
 #'   left-hand side of assignments. \code{NULL} (default) returns all names,
 #'   including anonymous visible returns.
 #'
-#' @return An object of class \code{robjgrader_records} (a named list of
-#'   record entries).
+#' @return An object of class \code{robjgrader_records}.
+#' @seealso \code{\link{record_start}}, \code{\link{record_script}},
+#'   \code{\link{validate}}
 #' @export
 get_records <- function(type = NULL, name = NULL) {
   records <- .recorder_env$records
@@ -134,22 +175,38 @@ print.robjgrader_records <- function(x, ...) {
 #'
 #' Parses \code{path} with \code{parse()}, evaluates each expression one at a
 #' time inside \code{envir}, and passes the result directly to the recorder
-#' callback -- bypassing \code{addTaskCallback}, which is never fired during
-#' \code{source()}.  This is the reliable way to record objects from a student
-#' submission file.
+#' callback -- bypassing \code{addTaskCallback}, which is never fired inside
+#' \code{source()}.  This is the correct way to record objects from a student
+#' submission file; \code{record_start()} / \code{record_stop()} will capture
+#' nothing when used in combination with \code{source()}.
+#'
+#' @details
+#' Errors in individual expressions are handled according to
+#' \code{stop_on_error}.  With the default \code{stop_on_error = FALSE},
+#' a failing expression emits a \code{warning()} and evaluation proceeds to
+#' the next expression.  This is the appropriate behaviour for autograding:
+#' a student may have errors in parts of their script, but objects produced
+#' before and after the error should still be graded.
+#'
+#' The function uses \code{on.exit()} to ensure the recorder state is reset
+#' even if evaluation is interrupted.
 #'
 #' @param path          Path to the R script to evaluate.
 #' @param envir         Environment in which to evaluate expressions. Default
 #'   \code{.GlobalEnv}.
-#' @param stop_on_error Logical. If \code{TRUE} the first error in the script
-#'   halts evaluation and re-throws.  If \code{FALSE} (default) each failing
-#'   expression emits a \code{warning()} and evaluation continues.
+#' @param stop_on_error Logical. If \code{TRUE}, the first error in the script
+#'   halts evaluation and re-throws the error. If \code{FALSE} (default),
+#'   each failing expression emits a warning and evaluation continues.
 #' @param record_df      Record data frames and tibbles. Default \code{TRUE}.
-#' @param record_ggplot  Record ggplot objects. Default \code{TRUE}.
-#' @param record_model   Record model objects. Default \code{TRUE}.
-#' @param record_table   Record table objects. Default \code{TRUE}.
+#' @param record_ggplot  Record \pkg{ggplot2} objects. Default \code{TRUE}.
+#' @param record_model   Record model objects (\code{lm}, \code{glm},
+#'   \code{fixest}, \code{lmerMod}, \code{glmerMod}). Default \code{TRUE}.
+#' @param record_table   Record table objects (\pkg{gt}, \pkg{tinytable},
+#'   \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.
 #'
 #' @return A \code{robjgrader_records} object, returned invisibly.
+#' @seealso \code{\link{source_student_file}}, \code{\link{get_records}},
+#'   \code{\link{validate}}
 #' @export
 record_script <- function(
   path,

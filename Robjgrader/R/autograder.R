@@ -12,9 +12,8 @@
 #' and when it is loaded interactively via \code{source("autograde.R")} (walks
 #' \code{sys.calls()}).  Pass \code{autograder_name} to add further exclusions.
 #'
-#' The student file path is stored as \code{attr(records, "student_file")} and
-#' is available to code-inspection functions such as those in
-#' \file{extract_code.R}.
+#' The student file path is stored as \code{attr(records, "student_file")}
+#' for downstream use.
 #'
 #' @param autograder_name Character or \code{NULL}. Additional filename(s) to
 #'   exclude beyond the auto-detected calling file.  Default \code{NULL}.
@@ -115,8 +114,12 @@ result_to_outcome <- function(result) {
 
 #' Submission test: always returns "SUCCESS"
 #'
-#' Use this as the first test case to confirm the student submission ran
-#' without errors.
+#' A zero-cost test case that always passes.  Use it as the first entry in
+#' \code{test_cases} to verify that the student file was sourced successfully
+#' and that the autograder infrastructure itself is working.  If
+#' \code{source_student_file()} throws an error before this function is
+#' called, Gradescope will report a failed submission rather than a
+#' zero-score result.
 #'
 #' @return \code{"SUCCESS"}
 #' @export
@@ -130,18 +133,35 @@ ag_submission_test <- function() "SUCCESS"
 #' results to a JSON file that Gradescope can parse.  Also prints a summary
 #' to the console when \code{verbose = TRUE}.
 #'
-#' @param test_cases A list of test-case lists.  Each entry must contain:
+#' @param test_cases A list of test-case lists.  Two interfaces are supported:
+#'
+#'   \strong{Result interface} (recommended -- works with \code{validate()} and
+#'   \code{validate_text()} output):
 #'   \describe{
 #'     \item{\code{name}}{Human-readable criterion label shown to students.}
-#'     \item{\code{fun}}{The test function: a function object or a character
-#'       string naming a function visible in the calling environment.}
+#'     \item{\code{result}}{A \code{robjgrader_result} from \code{validate()}
+#'       or \code{validate_text()}.}
+#'     \item{\code{max_score}}{Maximum point value for this criterion.  For
+#'       text results with a normalized \code{score} field (0--1), the actual
+#'       score is \code{score * max_score}, enabling partial credit.  For all
+#'       other results, \code{max_score} is awarded in full if
+#'       \code{overall == TRUE} and 0 otherwise.}
+#'     \item{\code{visibility}}{Optional. \code{"visible"} (default),
+#'       \code{"hidden"}, \code{"after_due_date"}, or
+#'       \code{"after_published"} (Gradescope visibility keys).}
+#'   }
+#'
+#'   \strong{Legacy function interface} (for custom test functions):
+#'   \describe{
+#'     \item{\code{name}}{Human-readable criterion label.}
+#'     \item{\code{fun}}{A function object or character string naming a
+#'       function in the calling environment.}
 #'     \item{\code{args}}{A list of arguments passed to \code{fun} via
-#'       \code{do.call}.}
-#'     \item{\code{expect}}{Expected return value; compared via
-#'       \code{.ag_to_string()}.}
-#'     \item{\code{visibility}}{\code{"visible"} (default) or
-#'       \code{"hidden"}.}
+#'       \code{do.call()}.}
+#'     \item{\code{expect}}{Expected return value; compared as a string via
+#'       \code{toString()}.}
 #'     \item{\code{weight}}{Point value for this criterion.}
+#'     \item{\code{visibility}}{Optional. Same values as above.}
 #'   }
 #' @param json_path   Output path for the JSON results file.  Defaults to
 #'   \code{"/autograder/results/results.json"} inside a Gradescope container

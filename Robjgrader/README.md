@@ -66,39 +66,64 @@ run_autograder(test_cases)
 
 Problem sets that include written interpretation questions can be graded
 via `validate_text()`, which sends the student's answer to an
-OpenAI-compatible LLM endpoint (default: Groq). Pass a question and
-rubric and the grading prompt is built automatically:
+OpenAI-compatible LLM endpoint (default: Groq, `temperature = 0` for
+deterministic results). Pass a question and rubric and the full grading
+prompt is built automatically.
+
+Students can submit all written answers in a single file. Use
+`split_student_text()` to extract individual sections before grading.
+Sections are detected automatically: Markdown files are split on `#`
+headings; plain-text and PDF files are split on labelled prefixes
+(`Q1:`, `Question 1.`, `1.`, `1)`) with a double-blank-line fallback.
 
 ```r
-answer <- find_student_text()          # auto-discovers the submission file
+# Student submits a single Markdown file:
+#
+#   # Q3: Interpretation
+#   A 1-unit increase in log GDP per capita is associated with...
+#
+#   # Q4: Fixed Effects
+#   After adding country fixed effects, the coefficient...
 
-res_text <- validate_text(
-  text      = answer,
-  question  = "Interpret the coefficient on gdp_pc in your regression.",
-  rubric    = c(
+text <- find_student_text()            # auto-discovers the text file
+
+res_q3 <- validate_text(
+  text       = text,
+  section    = "Q3",                   # matched by heading name
+  n_sections = 2,
+  question   = "Interpret the coefficient on gdp_pc in your regression.",
+  rubric     = c(
     direction    = "Correctly identifies the sign of the coefficient.",
     magnitude    = "Interprets the substantive size of the effect.",
     significance = "Mentions statistical significance and its implications."
   ),
-  reference = "solution_q3.txt",       # optional model answer for comparison
-  feedback  = TRUE                     # include per-student written feedback
+  reference  = "solution_q3.txt",      # optional model answer for comparison
+  feedback   = TRUE                    # include per-student written feedback
+)
+
+res_q4 <- validate_text(
+  text       = text,
+  section    = 2L,                     # matched by position
+  n_sections = 2,
+  question   = "What changes in the fixed-effects model and why?",
+  rubric     = c(direction_change = "...", mechanism = "...")
 )
 ```
 
 When `feedback = TRUE`, the LLM returns a short comment (max 3 sentences
-/ 200 words) that is included in the Gradescope output for incorrect
-answers. Feedback is constrained by prompt instructions to be
-constructive, precise, and in plain English — with no greetings,
-sign-offs, or filler phrases.
+/ 200 words) included in the Gradescope output for incorrect answers.
+Feedback is constrained to be constructive, precise, and in plain
+English — no greetings, sign-offs, or filler phrases.
 
 Text results integrate directly into `run_autograder()` alongside
-object-based results, with partial credit derived from the normalized
-score returned by the LLM:
+object-based results. Partial credit is supported: the LLM returns a
+normalized score (0–1) which is multiplied by `max_score`:
 
 ```r
 test_cases <- list(
   list(name = "OLS model",      result = res_model, max_score = 30),
-  list(name = "Interpretation", result = res_text,  max_score = 20)
+  list(name = "Interpretation", result = res_q3,    max_score = 20,
+       visibility = "after_published")
 )
 
 run_autograder(test_cases)
@@ -120,7 +145,8 @@ run_autograder(test_cases)
 | Function | Description |
 |:---|:---|
 | `validate()` | Validate a recorded object by name, match criteria, or reference object |
-| `validate_text()` | Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback |
+| `validate_text()` | Grade a written answer via an LLM, with optional rubric, reference answer, section extraction, and per-student feedback |
+| `split_student_text()` | Split a multi-question text file into named sections (Markdown headings or numbered prefixes) |
 | `find_student_text()` | Auto-discover a student text submission file in the working directory |
 | `read_student_text()` | Read a `.txt`, `.md`, or `.pdf` file into a character string |
 

@@ -106,8 +106,6 @@ run_autograder(test_cases)
 
 ### Key Functions
 
-| Function | Description |
-|:---|:---|
 **Recording**
 
 | Function | Description |

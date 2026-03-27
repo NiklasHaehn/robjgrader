@@ -94,27 +94,47 @@
 <div class="section level3">
 <h3 id="grading-written-answers">Grading Written Answers<a class="anchor" aria-label="anchor" href="#grading-written-answers"></a>
 </h3>
-<p>Problem sets that include written interpretation questions can be graded via <code><a href="reference/validate_text.html">validate_text()</a></code>, which sends the student’s answer to an OpenAI-compatible LLM endpoint (default: Groq). Pass a question and rubric and the grading prompt is built automatically:</p>
+<p>Problem sets that include written interpretation questions can be graded via <code><a href="reference/validate_text.html">validate_text()</a></code>, which sends the student’s answer to an OpenAI-compatible LLM endpoint (default: Groq, <code>temperature = 0</code> for deterministic results). Pass a question and rubric and the full grading prompt is built automatically.</p>
+<p>Students can submit all written answers in a single file. Use <code><a href="reference/split_student_text.html">split_student_text()</a></code> to extract individual sections before grading. Sections are detected automatically: Markdown files are split on <code>#</code> headings; plain-text and PDF files are split on labelled prefixes (<code>Q1:</code>, <code>Question 1.</code>, <code>1.</code>, <code>1)</code>) with a double-blank-line fallback.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">answer</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/find_student_text.html">find_student_text</a></span><span class="op">(</span><span class="op">)</span>          <span class="co"># auto-discovers the submission file</span></span>
+<code class="sourceCode R"><span><span class="co"># Student submits a single Markdown file:</span></span>
+<span><span class="co">#</span></span>
+<span><span class="co">#   # Q3: Interpretation</span></span>
+<span><span class="co">#   A 1-unit increase in log GDP per capita is associated with...</span></span>
+<span><span class="co">#</span></span>
+<span><span class="co">#   # Q4: Fixed Effects</span></span>
+<span><span class="co">#   After adding country fixed effects, the coefficient...</span></span>
 <span></span>
-<span><span class="va">res_text</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate_text.html">validate_text</a></span><span class="op">(</span></span>
-<span>  text      <span class="op">=</span> <span class="va">answer</span>,</span>
-<span>  question  <span class="op">=</span> <span class="st">"Interpret the coefficient on gdp_pc in your regression."</span>,</span>
-<span>  rubric    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span><span class="va">text</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/find_student_text.html">find_student_text</a></span><span class="op">(</span><span class="op">)</span>            <span class="co"># auto-discovers the text file</span></span>
+<span></span>
+<span><span class="va">res_q3</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate_text.html">validate_text</a></span><span class="op">(</span></span>
+<span>  text       <span class="op">=</span> <span class="va">text</span>,</span>
+<span>  section    <span class="op">=</span> <span class="st">"Q3"</span>,                   <span class="co"># matched by heading name</span></span>
+<span>  n_sections <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>  question   <span class="op">=</span> <span class="st">"Interpret the coefficient on gdp_pc in your regression."</span>,</span>
+<span>  rubric     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>    direction    <span class="op">=</span> <span class="st">"Correctly identifies the sign of the coefficient."</span>,</span>
 <span>    magnitude    <span class="op">=</span> <span class="st">"Interprets the substantive size of the effect."</span>,</span>
 <span>    significance <span class="op">=</span> <span class="st">"Mentions statistical significance and its implications."</span></span>
 <span>  <span class="op">)</span>,</span>
-<span>  reference <span class="op">=</span> <span class="st">"solution_q3.txt"</span>,       <span class="co"># optional model answer for comparison</span></span>
-<span>  feedback  <span class="op">=</span> <span class="cn">TRUE</span>                     <span class="co"># include per-student written feedback</span></span>
+<span>  reference  <span class="op">=</span> <span class="st">"solution_q3.txt"</span>,      <span class="co"># optional model answer for comparison</span></span>
+<span>  feedback   <span class="op">=</span> <span class="cn">TRUE</span>                    <span class="co"># include per-student written feedback</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">res_q4</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate_text.html">validate_text</a></span><span class="op">(</span></span>
+<span>  text       <span class="op">=</span> <span class="va">text</span>,</span>
+<span>  section    <span class="op">=</span> <span class="fl">2L</span>,                     <span class="co"># matched by position</span></span>
+<span>  n_sections <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>  question   <span class="op">=</span> <span class="st">"What changes in the fixed-effects model and why?"</span>,</span>
+<span>  rubric     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>direction_change <span class="op">=</span> <span class="st">"..."</span>, mechanism <span class="op">=</span> <span class="st">"..."</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>When <code>feedback = TRUE</code>, the LLM returns a short comment (max 3 sentences / 200 words) that is included in the Gradescope output for incorrect answers. Feedback is constrained by prompt instructions to be constructive, precise, and in plain English — with no greetings, sign-offs, or filler phrases.</p>
-<p>Text results integrate directly into <code><a href="reference/run_autograder.html">run_autograder()</a></code> alongside object-based results, with partial credit derived from the normalized score returned by the LLM:</p>
+<p>When <code>feedback = TRUE</code>, the LLM returns a short comment (max 3 sentences / 200 words) included in the Gradescope output for incorrect answers. Feedback is constrained to be constructive, precise, and in plain English — no greetings, sign-offs, or filler phrases.</p>
+<p>Text results integrate directly into <code><a href="reference/run_autograder.html">run_autograder()</a></code> alongside object-based results. Partial credit is supported: the LLM returns a normalized score (0–1) which is multiplied by <code>max_score</code>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">test_cases</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"OLS model"</span>,      result <span class="op">=</span> <span class="va">res_model</span>, max_score <span class="op">=</span> <span class="fl">30</span><span class="op">)</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"Interpretation"</span>, result <span class="op">=</span> <span class="va">res_text</span>,  max_score <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"Interpretation"</span>, result <span class="op">=</span> <span class="va">res_q3</span>,    max_score <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>       visibility <span class="op">=</span> <span class="st">"after_published"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/run_autograder.html">run_autograder</a></span><span class="op">(</span><span class="va">test_cases</span><span class="op">)</span></span></code></pre></div>
@@ -168,13 +188,17 @@
 </tr>
 <tr class="even">
 <td align="left"><code><a href="reference/validate_text.html">validate_text()</a></code></td>
-<td align="left">Grade a written answer via an LLM, with optional rubric, reference answer, and per-student feedback</td>
+<td align="left">Grade a written answer via an LLM, with optional rubric, reference answer, section extraction, and per-student feedback</td>
 </tr>
 <tr class="odd">
+<td align="left"><code><a href="reference/split_student_text.html">split_student_text()</a></code></td>
+<td align="left">Split a multi-question text file into named sections (Markdown headings or numbered prefixes)</td>
+</tr>
+<tr class="even">
 <td align="left"><code><a href="reference/find_student_text.html">find_student_text()</a></code></td>
 <td align="left">Auto-discover a student text submission file in the working directory</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td align="left"><code><a href="reference/read_student_text.html">read_student_text()</a></code></td>
 <td align="left">Read a <code>.txt</code>, <code>.md</code>, or <code>.pdf</code> file into a character string</td>
 </tr>

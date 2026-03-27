@@ -120,8 +120,13 @@ find_student_text <- function(pattern = NULL, autograder_name = NULL) {
 #' @param name      Character. Label for this result, shown in console output
 #'   and Gradescope.
 #' @param feedback  Logical. If \code{TRUE}, the LLM is asked to provide
-#'   written feedback (max 3 sentences / 200 words) stored in
-#'   \code{result$feedback}.
+#'   written feedback stored in \code{result$feedback} and included in the
+#'   Gradescope output when the answer is not fully correct.  The feedback is
+#'   constrained by prompt instructions: it must be constructive and precise,
+#'   written in plain English, at most 3 sentences and 200 words, free of
+#'   greetings or sign-offs, and must start directly with the substantive
+#'   comment.  No reference to automated grading or language models is
+#'   permitted.
 #' @param model     Character. Model identifier passed to the API.
 #' @param base_url  Character. Base URL of the OpenAI-compatible API endpoint.
 #'   Defaults to Groq (\code{"https://api.groq.com/openai/v1"}).

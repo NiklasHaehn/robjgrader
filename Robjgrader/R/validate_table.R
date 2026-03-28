@@ -37,7 +37,8 @@
 )
 
 .is_gof_label <- function(x) {
-  x %in% .gof_exact | grepl("^FE:", x)
+  custom <- getOption("robjgrader.gof_labels", default = character(0L))
+  x %in% c(.gof_exact, custom) | grepl("^FE:", x)
 }
 
 .detect_gof_labels <- function(row_labels) {

@@ -216,7 +216,7 @@ split_student_text <- function(text, n_sections = NULL, format = "auto") {
   if (length(exact) > 0L) return(sections[[exact[1L]]])
 
   partial <- which(grepl(query, lower, fixed = TRUE) |
-                   grepl(lower,  query, fixed = TRUE))
+                   vapply(lower, grepl, logical(1L), x = query, fixed = TRUE))
   if (length(partial) > 0L) return(sections[[partial[1L]]])
 
   stop(sprintf("Section '%s' not found. Available sections: %s",
@@ -286,11 +286,15 @@ split_student_text <- function(text, n_sections = NULL, format = "auto") {
 #'   greetings or sign-offs, and must start directly with the substantive
 #'   comment.  No reference to automated grading or language models is
 #'   permitted.
-#' @param model     Character. Model identifier passed to the API.
+#' @param model     Character. Model identifier.  Defaults to
+#'   \code{getOption("robjgrader.llm.model")} if set, otherwise
+#'   \code{"llama-3.3-70b-versatile"}.  See \code{\link{robjgrader_set_llm}}.
 #' @param base_url  Character. Base URL of the OpenAI-compatible API endpoint.
-#'   Defaults to Groq (\code{"https://api.groq.com/openai/v1"}).
-#' @param api_key   Character. API key. Defaults to the \code{GROQ_API_KEY}
-#'   environment variable.
+#'   Defaults to \code{getOption("robjgrader.llm.base_url")} if set, otherwise
+#'   the Groq endpoint.
+#' @param api_key   Character. API bearer token.  Defaults to
+#'   \code{getOption("robjgrader.llm.api_key")} if set, otherwise the
+#'   \env{GROQ_API_KEY} environment variable.
 #' @param max_retry Integer. Maximum regrading attempts on invalid responses.
 #'   Default \code{3L}.
 #'
@@ -308,9 +312,9 @@ validate_text <- function(
   reference  = NULL,
   name       = "text",
   feedback   = FALSE,
-  model      = "llama-3.3-70b-versatile",
-  base_url   = "https://api.groq.com/openai/v1",
-  api_key    = Sys.getenv("GROQ_API_KEY"),
+  model      = getOption("robjgrader.llm.model",    "llama-3.3-70b-versatile"),
+  base_url   = getOption("robjgrader.llm.base_url", "https://api.groq.com/openai/v1"),
+  api_key    = getOption("robjgrader.llm.api_key",  Sys.getenv("GROQ_API_KEY")),
   max_retry  = 3L
 ) {
   if (is.null(prompt) && (is.null(question) || is.null(rubric)))
@@ -318,7 +322,7 @@ validate_text <- function(
   if (!is.null(prompt) && (!is.null(question) || !is.null(rubric)))
     stop("'prompt' and 'question'/'rubric' are mutually exclusive.")
   if (nchar(api_key) == 0L)
-    stop("No API key found. Set GROQ_API_KEY or pass 'api_key' explicitly.")
+    stop("No API key found. Call robjgrader_set_llm() or set GROQ_API_KEY.")
 
   if (!is.null(section)) {
     sections <- split_student_text(text, n_sections = n_sections)

@@ -14,9 +14,9 @@ validate_text(
   reference = NULL,
   name = "text",
   feedback = FALSE,
-  model = "llama-3.3-70b-versatile",
-  base_url = "https://api.groq.com/openai/v1",
-  api_key = Sys.getenv("GROQ_API_KEY"),
+  model = getOption("robjgrader.llm.model", "llama-3.3-70b-versatile"),
+  base_url = getOption("robjgrader.llm.base_url", "https://api.groq.com/openai/v1"),
+  api_key = getOption("robjgrader.llm.api_key", Sys.getenv("GROQ_API_KEY")),
   max_retry = 3L
 )
 }
@@ -63,13 +63,17 @@ greetings or sign-offs, and must start directly with the substantive
 comment.  No reference to automated grading or language models is
 permitted.}
 
-\item{model}{Character. Model identifier passed to the API.}
+\item{model}{Character. Model identifier.  Defaults to
+\code{getOption("robjgrader.llm.model")} if set, otherwise
+\code{"llama-3.3-70b-versatile"}.  See \code{\link{robjgrader_set_llm}}.}
 
 \item{base_url}{Character. Base URL of the OpenAI-compatible API endpoint.
-Defaults to Groq (\code{"https://api.groq.com/openai/v1"}).}
+Defaults to \code{getOption("robjgrader.llm.base_url")} if set, otherwise
+the Groq endpoint.}
 
-\item{api_key}{Character. API key. Defaults to the \code{GROQ_API_KEY}
-environment variable.}
+\item{api_key}{Character. API bearer token.  Defaults to
+\code{getOption("robjgrader.llm.api_key")} if set, otherwise the
+\env{GROQ_API_KEY} environment variable.}
 
 \item{max_retry}{Integer. Maximum regrading attempts on invalid responses.
 Default \code{3L}.}

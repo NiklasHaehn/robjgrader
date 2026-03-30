@@ -15,7 +15,12 @@ validate(
 )
 }
 \arguments{
-\item{records}{A \code{robjgrader_records} object from \code{get_records()}.}
+\item{records}{A \code{robjgrader_records} object returned by
+\code{record_script()} or \code{source_student_file()}.  The object
+carries a \code{.used_ids} environment attribute that tracks which records
+have already been matched; pass the \emph{same} \code{records} object to
+all \code{validate()} calls within one autograder run to get correct
+exclusive-matching behaviour.}
 
 \item{name}{Character. Variable name of the recorded object. Primary
 identification method.}
@@ -98,4 +103,23 @@ A \code{robjgrader_result} object.
 \description{
 Retrieves an object from a \code{robjgrader_records} result and validates
 it against a reference object, a set of named checks, or both.
+}
+\details{
+\strong{Exclusive matching:} Each student object is matched to at most one
+\code{validate()} call per autograder run.  Once a record is matched it is
+marked as used, so a second \code{validate()} call with identical criteria
+will match the \emph{next best} available candidate rather than reusing the
+same object.  This ensures that two separate grading steps targeting the
+same type of object (e.g. "first lm" and "second lm") receive distinct
+student objects.  The used-object state lives in the
+\code{.used_ids} environment attribute of the \code{records} object, which
+is initialised automatically by \code{record_script()} and
+\code{source_student_file()}.
+
+\strong{Graceful not-found behaviour:} When no matching object is available
+(either because the student never created an object of that type, or all
+candidates are already used), \code{validate()} returns a
+\code{robjgrader_result} with \code{overall = FALSE} and a descriptive
+"not found" message.  It never calls \code{stop()}, so subsequent grading
+steps continue to run regardless.
 }

@@ -12,19 +12,40 @@ record_start(
 )
 }
 \arguments{
-\item{record_df}{Record data frames and tibbles. Default TRUE.}
+\item{record_df}{Record data frames and tibbles. Default \code{TRUE}.}
 
-\item{record_ggplot}{Record ggplot objects. Default TRUE.}
+\item{record_ggplot}{Record \pkg{ggplot2} objects. Default \code{TRUE}.}
 
-\item{record_model}{Record model objects (lm, glm, fixest). Default TRUE.}
+\item{record_model}{Record model objects (\code{lm}, \code{glm},
+\code{fixest}, \code{lmerMod}, \code{glmerMod}). Default \code{TRUE}.}
 
-\item{record_table}{Record table objects (gt, tinytable, flextable,
-huxtable). Default TRUE.}
+\item{record_table}{Record table objects (\pkg{gt}, \pkg{tinytable},
+\pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.}
 }
 \value{
-Invisibly NULL. Called for its side effect.
+Invisibly \code{NULL}. Called for its side effect.
 }
 \description{
 Attaches a task callback that intercepts top-level assignments, visible
-returns, and explicit print() calls for supported object classes.
+returns, and explicit \code{print()} calls in the current R session.
+Every captured object is stored internally and can be retrieved with
+\code{get_records()}.
+}
+\details{
+\code{record_start()} / \code{record_stop()} are designed for
+\strong{interactive use at the REPL}.  They rely on
+\code{addTaskCallback()}, which is only triggered by top-level expressions
+typed directly into the console.  If you need to record objects produced
+by a script file, use \code{record_script()} or
+\code{source_student_file()} instead -- these evaluate each expression
+individually and call the recorder callback directly, bypassing the
+task-callback limitation.
+
+Only one recording can be active at a time.  Calling \code{record_start()}
+while a recording is already active emits a warning and returns without
+resetting the existing session.
+}
+\seealso{
+\code{\link{record_stop}}, \code{\link{get_records}},
+  \code{\link{record_script}}, \code{\link{source_student_file}}
 }

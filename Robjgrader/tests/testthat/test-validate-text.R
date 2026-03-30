@@ -386,3 +386,177 @@ test_that("validate_text: uses model from options when not passed explicitly", {
     expect_s3_class(res, "robjgrader_result")
   })
 })
+
+
+# ==============================================================================
+# validate_text() — match_section
+# ==============================================================================
+
+test_that("validate_text: match_section selects section by regex on heading", {
+  txt <- "# Q1: Regression\nanswer one\n\n# Q2: Interpretation\nanswer two"
+  captured_text <- NULL
+
+  local_mocked_bindings(
+    .call_llm = function(messages, ...) {
+      captured_text <<- messages[[2L]]$content
+      as.character(llm_json())
+    },
+    .package = "Robjgrader"
+  )
+  validate_text(
+    text          = txt,
+    match_section = list(heading = "interpret"),
+    question      = "q",
+    rubric        = c(x = "y"),
+    api_key       = "test-key"
+  )
+  expect_match(captured_text, "answer two")
+  expect_false(grepl("answer one", captured_text))
+})
+
+test_that("validate_text: match_section with min_words filters short sections", {
+  txt <- "# Q1: Short\nok\n\n# Q2: Long\nThis is a much longer answer with many words here."
+  captured_text <- NULL
+
+  local_mocked_bindings(
+    .call_llm = function(messages, ...) {
+      captured_text <<- messages[[2L]]$content
+      as.character(llm_json())
+    },
+    .package = "Robjgrader"
+  )
+  # Both headings contain no specific word; match_section matches Q2 (long enough)
+  validate_text(
+    text          = txt,
+    match_section = list(heading = "Q[12]", min_words = 5L),
+    question      = "q",
+    rubric        = c(x = "y"),
+    api_key       = "test-key"
+  )
+  expect_match(captured_text, "longer answer")
+})
+
+test_that("validate_text: match_section errors when no heading matches", {
+  txt <- "# Q1\nanswer one\n\n# Q2\nanswer two"
+
+  local_mocked_bindings(
+    .call_llm = function(...) as.character(llm_json()),
+    .package  = "Robjgrader"
+  )
+  expect_error(
+    validate_text(
+      text          = txt,
+      match_section = list(heading = "nonexistent_xyz"),
+      question      = "q",
+      rubric        = c(x = "y"),
+      api_key       = "test-key"
+    ),
+    "No section heading matches"
+  )
+})
+
+test_that("validate_text: section and match_section are mutually exclusive", {
+  expect_error(
+    validate_text(
+      text          = "# Q1\nsome text",
+      section       = "Q1",
+      match_section = list(heading = "Q1"),
+      question      = "q",
+      rubric        = c(x = "y")
+    ),
+    "mutually exclusive"
+  )
+})
+
+
+# ==============================================================================
+# validate_text() — list-based reference (Markdown section)
+# ==============================================================================
+
+test_that("validate_text: reference as list reads Markdown section", {
+  ref_content  <- "# Q1: Interpretation\nThe coefficient is positive.\n\n# Q2: FE\nFixed effects control for..."
+  ref_path     <- tmp_txt(ref_content, ext = "md")
+  captured_sys <- NULL
+
+  local_mocked_bindings(
+    .call_llm = function(messages, ...) {
+      captured_sys <<- messages[[1L]]$content
+      as.character(llm_json())
+    },
+    .package = "Robjgrader"
+  )
+  validate_text(
+    text      = "The sign is positive.",
+    reference = list(path = ref_path, section = "Q1"),
+    question  = "q",
+    rubric    = c(x = "y"),
+    api_key   = "test-key"
+  )
+  expect_match(captured_sys, "coefficient is positive")
+  expect_false(grepl("Fixed effects", captured_sys))
+})
+
+test_that("validate_text: reference as file path reads whole file", {
+  ref_path     <- tmp_txt("Model answer: positive coefficient.", ext = "txt")
+  captured_sys <- NULL
+
+  local_mocked_bindings(
+    .call_llm = function(messages, ...) {
+      captured_sys <<- messages[[1L]]$content
+      as.character(llm_json())
+    },
+    .package = "Robjgrader"
+  )
+  validate_text(
+    text      = "The sign is positive.",
+    reference = ref_path,
+    question  = "q",
+    rubric    = c(x = "y"),
+    api_key   = "test-key"
+  )
+  expect_match(captured_sys, "Model answer")
+})
+
+
+# ==============================================================================
+# validate_text() — Mode A with reference injection
+# ==============================================================================
+
+test_that("validate_text: Mode A injects reference into system prompt", {
+  captured_sys <- NULL
+
+  local_mocked_bindings(
+    .call_llm = function(messages, ...) {
+      captured_sys <<- messages[[1L]]$content
+      as.character(llm_json())
+    },
+    .package = "Robjgrader"
+  )
+  validate_text(
+    text      = "answer",
+    prompt    = "Grade the following answer strictly.",
+    reference = "The correct interpretation is positive.",
+    api_key   = "test-key"
+  )
+  expect_match(captured_sys, "Grade the following answer strictly")
+  expect_match(captured_sys, "REFERENCE ANSWER")
+  expect_match(captured_sys, "positive")
+})
+
+test_that("validate_text: Mode A without reference uses prompt unchanged", {
+  captured_sys <- NULL
+
+  local_mocked_bindings(
+    .call_llm = function(messages, ...) {
+      captured_sys <<- messages[[1L]]$content
+      as.character(llm_json())
+    },
+    .package = "Robjgrader"
+  )
+  validate_text(
+    text    = "answer",
+    prompt  = "Grade this.",
+    api_key = "test-key"
+  )
+  expect_equal(captured_sys, "Grade this.")
+})

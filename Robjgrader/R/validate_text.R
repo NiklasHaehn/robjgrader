@@ -224,6 +224,34 @@ split_student_text <- function(text, n_sections = NULL, format = "auto") {
 }
 
 
+.extract_section_match <- function(sections, match_spec, name) {
+  heading   <- match_spec$heading
+  min_words <- match_spec$min_words %||% 0L
+
+  if (is.null(heading))
+    stop("'match_section' must include a 'heading' entry (regex pattern).")
+
+  hits <- which(grepl(heading, names(sections), perl = TRUE, ignore.case = TRUE))
+
+  if (min_words > 0L) {
+    long_enough <- vapply(sections[hits], function(s) {
+      length(strsplit(trimws(s), "\\s+")[[1L]]) >= min_words
+    }, logical(1L))
+    hits <- hits[long_enough]
+  }
+
+  if (length(hits) == 0L)
+    stop(sprintf(
+      "No section heading matches pattern '%s'%s. Available headings: %s",
+      heading,
+      if (min_words > 0L) sprintf(" (min_words = %d)", min_words) else "",
+      paste(names(sections), collapse = ", ")
+    ))
+
+  sections[[hits[[1L]]]]
+}
+
+
 #' Validate a student text answer using an LLM
 #'
 #' Sends a student's written answer to an OpenAI-compatible LLM endpoint for
@@ -265,17 +293,35 @@ split_student_text <- function(text, n_sections = NULL, format = "auto") {
 #'   questions, identifies which section to grade.  A character value is
 #'   matched against section headings (case-insensitive, partial match
 #'   allowed); an integer selects by position.  When \code{NULL} (default),
-#'   the full text is graded without splitting.
+#'   the full text is graded without splitting.  Mutually exclusive with
+#'   \code{match_section}.
 #' @param n_sections Integer or \code{NULL}. Total number of questions in the
 #'   submission.  Used as a hint by \code{split_student_text()} when no
 #'   heading patterns are found (limits blank-line splitting to the first
 #'   \code{n_sections} chunks).
-#' @param reference Character or file path. An optional model answer used as a
-#'   grading standard.  If a valid file path is supplied, the file is read via
-#'   \code{read_student_text()}.  When provided, the LLM compares the student
-#'   answer against the reference rather than grading against abstract criteria
-#'   alone.  Only used in Mode B (\code{question}/\code{rubric}); ignored in
-#'   Mode A.
+#' @param match_section Named list for regex-based section selection.  Use when
+#'   student headings are inconsistent and a fixed label cannot be relied upon.
+#'   Required entry: \code{heading} — a regex pattern matched
+#'   case-insensitively against section headings via \code{grepl(perl = TRUE)}
+#'   (e.g. \code{list(heading = "interpret|gdp|koeffizient")}).  Optional
+#'   entry: \code{min_words} — integer; sections whose body contains fewer
+#'   words than this threshold are skipped.  The first surviving match is used.
+#'   Mutually exclusive with \code{section}.
+#' @param reference Model answer used as a grading standard.  Three forms are
+#'   accepted:
+#'   \describe{
+#'     \item{Named list}{Extract a specific Markdown section:
+#'       \code{list(path = "solutions.md", section = "Q3")}.  \code{section}
+#'       uses case-insensitive partial matching against section headings.}
+#'     \item{File path (character)}{The whole file is read via
+#'       \code{read_student_text()}.}
+#'     \item{Plain character string}{Used directly as the reference text.}
+#'   }
+#'   In Mode B (\code{question}/\code{rubric}) the reference is embedded in the
+#'   auto-generated grading prompt.  In Mode A (\code{prompt}) the reference
+#'   text is appended to the system prompt under the header
+#'   \emph{"REFERENCE ANSWER (use as grading standard)"}, so the model can
+#'   compare the student answer against the reference.
 #' @param name      Character. Label for this result, shown in console output
 #'   and Gradescope.
 #' @param feedback  Logical. If \code{TRUE}, the LLM is asked to provide
@@ -304,44 +350,58 @@ split_student_text <- function(text, n_sections = NULL, format = "auto") {
 #' @export
 validate_text <- function(
   text,
-  section    = NULL,
-  n_sections = NULL,
-  prompt     = NULL,
-  question   = NULL,
-  rubric     = NULL,
-  reference  = NULL,
-  name       = "text",
-  feedback   = FALSE,
-  model      = getOption("robjgrader.llm.model",    "llama-3.3-70b-versatile"),
-  base_url   = getOption("robjgrader.llm.base_url", "https://api.groq.com/openai/v1"),
-  api_key    = getOption("robjgrader.llm.api_key",  Sys.getenv("GROQ_API_KEY")),
-  max_retry  = 3L
+  section       = NULL,
+  n_sections    = NULL,
+  match_section = NULL,
+  prompt        = NULL,
+  question      = NULL,
+  rubric        = NULL,
+  reference     = NULL,
+  name          = "text",
+  feedback      = FALSE,
+  model         = getOption("robjgrader.llm.model",    "llama-3.3-70b-versatile"),
+  base_url      = getOption("robjgrader.llm.base_url", "https://api.groq.com/openai/v1"),
+  api_key       = getOption("robjgrader.llm.api_key",  Sys.getenv("GROQ_API_KEY")),
+  max_retry     = 3L
 ) {
   if (is.null(prompt) && (is.null(question) || is.null(rubric)))
     stop("Provide either 'prompt' (Mode A) or both 'question' and 'rubric' (Mode B).")
   if (!is.null(prompt) && (!is.null(question) || !is.null(rubric)))
     stop("'prompt' and 'question'/'rubric' are mutually exclusive.")
+  if (!is.null(section) && !is.null(match_section))
+    stop("'section' and 'match_section' are mutually exclusive.")
   if (nchar(api_key) == 0L)
     stop("No API key found. Call robjgrader_set_llm() or set GROQ_API_KEY.")
 
   if (!is.null(section)) {
     sections <- split_student_text(text, n_sections = n_sections)
     text     <- .extract_section(sections, section, name)
+  } else if (!is.null(match_section)) {
+    sections <- split_student_text(text, n_sections = n_sections)
+    text     <- .extract_section_match(sections, match_section, name)
   }
 
-  ref_text <- if (!is.null(reference)) {
-    if (is.character(reference) && length(reference) == 1L &&
-        file.exists(reference)) {
-      read_student_text(reference)
-    } else {
-      as.character(reference)
-    }
+  ref_text <- if (is.list(reference)) {
+    full     <- read_student_text(reference$path)
+    ref_secs <- split_student_text(full)
+    .extract_section(ref_secs, reference$section, paste0(name, " reference"))
+  } else if (is.character(reference) && length(reference) == 1L &&
+             file.exists(reference)) {
+    read_student_text(reference)
+  } else if (!is.null(reference)) {
+    as.character(reference)
   } else {
     NULL
   }
 
-  sys_prompt <- if (!is.null(prompt)) prompt else
+  sys_prompt <- if (!is.null(prompt)) {
+    if (!is.null(ref_text))
+      paste0(prompt, "\n\nREFERENCE ANSWER (use as grading standard):\n", ref_text)
+    else
+      prompt
+  } else {
     .build_text_prompt(question, rubric, feedback, ref_text)
+  }
 
   messages <- list(
     list(role = "system", content = sys_prompt),

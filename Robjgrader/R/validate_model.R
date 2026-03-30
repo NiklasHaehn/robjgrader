@@ -29,6 +29,13 @@
 #   has_weights  logical -- whether any weights are used
 #   nobs         integer -- expected number of observations
 #   data         character -- name of data object in model call
+#   coef_sign    named character vector -- sign of individual coefficients:
+#                  "positive", "negative", "non-negative", "non-positive", "zero"
+#   coef         named numeric / list(values, tolerance) -- coefficient values
+#                  with optional absolute tolerance (default 0)
+#   coef_sig     named logical vector -- statistical significance (TRUE = sig.)
+#   coef_sig_level  numeric -- significance threshold for coef_sig (default 0.05)
+#                  lmer models: coef_sig returns pass = NA (no p-values)
 
 .model_default_groups <- c("estimator", "outcome", "predictors", "interactions",
                             "effects", "inference", "weights", "sample", "random_effects")
@@ -266,6 +273,104 @@
     )
   }
 
+  if (!is.null(chk[["coef_sign"]])) {
+    ests <- .get_model_coef(obj)
+    for (nm in names(chk[["coef_sign"]])) {
+      sgn <- chk[["coef_sign"]][[nm]]
+      key <- paste0("coef_sign.", nm)
+      if (is.null(ests) || !(nm %in% names(ests))) {
+        avail <- if (!is.null(ests)) paste(names(ests), collapse = ", ") else "<none>"
+        results[[key]] <- .make_check(
+          key, FALSE, sgn, NA,
+          sprintf("coefficient '%s' not found; available: %s", nm, avail)
+        )
+        next
+      }
+      val  <- ests[[nm]]
+      pass <- switch(sgn,
+        positive      = val  > 0,
+        negative      = val  < 0,
+        `non-negative` = val >= 0,
+        `non-positive` = val <= 0,
+        zero          = val == 0,
+        stop(sprintf("Unknown sign '%s' for coef_sign['%s'].", sgn, nm))
+      )
+      results[[key]] <- .make_check(
+        key, pass, sgn, val,
+        if (pass) sprintf("coef '%s' = %.4g has sign '%s'", nm, val, sgn)
+        else      sprintf("coef '%s' = %.4g does not satisfy sign '%s'", nm, val, sgn)
+      )
+    }
+  }
+
+  if (!is.null(chk[["coef"]])) {
+    ests      <- .get_model_coef(obj)
+    coef_spec <- chk[["coef"]]
+    exp_vals  <- if (is.list(coef_spec)) coef_spec$values %||% coef_spec else coef_spec
+    tol       <- if (is.list(coef_spec)) coef_spec$tolerance %||% 0 else 0
+    if (!is.list(exp_vals)) exp_vals <- as.list(exp_vals)
+    for (nm in names(exp_vals)) {
+      exp <- as.numeric(exp_vals[[nm]])
+      key <- paste0("coef.", nm)
+      if (is.null(ests) || !(nm %in% names(ests))) {
+        avail <- if (!is.null(ests)) paste(names(ests), collapse = ", ") else "<none>"
+        results[[key]] <- .make_check(
+          key, FALSE, exp, NA,
+          sprintf("coefficient '%s' not found; available: %s", nm, avail)
+        )
+        next
+      }
+      obs  <- ests[[nm]]
+      pass <- abs(obs - exp) <= tol
+      results[[key]] <- .make_check(
+        key, pass, exp, obs,
+        if (pass)
+          sprintf("coef '%s' = %.4g within tolerance %.4g of %.4g", nm, obs, tol, exp)
+        else
+          sprintf("coef '%s': expected %.4g (\u00b1%.4g), found %.4g", nm, exp, tol, obs)
+      )
+    }
+  }
+
+  if (!is.null(chk[["coef_sig"]])) {
+    sig_level <- chk[["coef_sig_level"]] %||% 0.05
+    pvals     <- .get_model_pvalues(obj)
+
+    for (nm in names(chk[["coef_sig"]])) {
+      exp_sig <- isTRUE(chk[["coef_sig"]][[nm]])
+      key     <- paste0("coef_sig.", nm)
+
+      if (is.null(pvals)) {
+        results[[key]] <- .make_check(
+          key, NA, exp_sig, NA,
+          sprintf("p-values not available for model class '%s'", cls)
+        )
+        next
+      }
+      if (!(nm %in% names(pvals))) {
+        avail <- paste(names(pvals), collapse = ", ")
+        results[[key]] <- .make_check(
+          key, FALSE, exp_sig, NA,
+          sprintf("coefficient '%s' not found; available: %s", nm, avail)
+        )
+        next
+      }
+      p    <- pvals[[nm]]
+      sig  <- p < sig_level
+      pass <- sig == exp_sig
+      results[[key]] <- .make_check(
+        key, pass, exp_sig, p,
+        if (pass)
+          sprintf("coef '%s': p = %.4g %s (alpha = %.2f)",
+                  nm, p, if (sig) "significant" else "not significant", sig_level)
+        else
+          sprintf("coef '%s': expected %s, p = %.4g (alpha = %.2f)",
+                  nm, if (exp_sig) "significant" else "not significant",
+                  p, sig_level)
+      )
+    }
+  }
+
   .make_result(name, "model", cls, results)
 }
 
@@ -445,5 +550,25 @@
     cl <- obj$call$cluster
     if (is.null(cl)) return(NULL)
     all.vars(eval(cl))
+  }, error = function(e) NULL)
+}
+
+.get_model_coef <- function(obj) {
+  if (inherits(obj, c("lmerMod", "glmerMod"))) {
+    if (requireNamespace("lme4", quietly = TRUE))
+      return(lme4::fixef(obj))
+    return(NULL)
+  }
+  tryCatch(stats::coef(obj), error = function(e) NULL)
+}
+
+.get_model_pvalues <- function(obj) {
+  if (inherits(obj, "lmerMod")) return(NULL)
+  tryCatch({
+    ct    <- summary(obj)$coefficients
+    if (is.null(ct)) return(NULL)
+    p_col <- grep("Pr\\(", colnames(ct), value = TRUE)[1L]
+    if (is.na(p_col)) return(NULL)
+    stats::setNames(ct[, p_col], rownames(ct))
   }, error = function(e) NULL)
 }

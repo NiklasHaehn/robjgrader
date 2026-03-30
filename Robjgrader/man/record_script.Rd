@@ -20,25 +20,46 @@ record_script(
 \item{envir}{Environment in which to evaluate expressions. Default
 \code{.GlobalEnv}.}
 
-\item{stop_on_error}{Logical. If \code{TRUE} the first error in the script
-halts evaluation and re-throws.  If \code{FALSE} (default) each failing
-expression emits a \code{warning()} and evaluation continues.}
+\item{stop_on_error}{Logical. If \code{TRUE}, the first error in the script
+halts evaluation and re-throws the error. If \code{FALSE} (default),
+each failing expression emits a warning and evaluation continues.}
 
 \item{record_df}{Record data frames and tibbles. Default \code{TRUE}.}
 
-\item{record_ggplot}{Record ggplot objects. Default \code{TRUE}.}
+\item{record_ggplot}{Record \pkg{ggplot2} objects. Default \code{TRUE}.}
 
-\item{record_model}{Record model objects. Default \code{TRUE}.}
+\item{record_model}{Record model objects (\code{lm}, \code{glm},
+\code{fixest}, \code{lmerMod}, \code{glmerMod}). Default \code{TRUE}.}
 
-\item{record_table}{Record table objects. Default \code{TRUE}.}
+\item{record_table}{Record table objects (\pkg{gt}, \pkg{tinytable},
+\pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.}
 }
 \value{
-A \code{robjgrader_records} object, returned invisibly.
+A \code{robjgrader_records} object, returned invisibly.  The object
+  carries a \code{.used_ids} environment attribute (initially empty) that
+  \code{validate()} uses to implement exclusive object matching — each
+  student object is matched to at most one grading step per autograder run.
 }
 \description{
 Parses \code{path} with \code{parse()}, evaluates each expression one at a
 time inside \code{envir}, and passes the result directly to the recorder
-callback -- bypassing \code{addTaskCallback}, which is never fired during
-\code{source()}.  This is the reliable way to record objects from a student
-submission file.
+callback -- bypassing \code{addTaskCallback}, which is never fired inside
+\code{source()}.  This is the correct way to record objects from a student
+submission file; \code{record_start()} / \code{record_stop()} will capture
+nothing when used in combination with \code{source()}.
+}
+\details{
+Errors in individual expressions are handled according to
+\code{stop_on_error}.  With the default \code{stop_on_error = FALSE},
+a failing expression emits a \code{warning()} and evaluation proceeds to
+the next expression.  This is the appropriate behaviour for autograding:
+a student may have errors in parts of their script, but objects produced
+before and after the error should still be graded.
+
+The function uses \code{on.exit()} to ensure the recorder state is reset
+even if evaluation is interrupted.
+}
+\seealso{
+\code{\link{source_student_file}}, \code{\link{get_records}},
+  \code{\link{validate}}
 }

@@ -7,12 +7,32 @@
 read_student_text(path)
 }
 \arguments{
-\item{path}{Path to the submission file.}
+\item{path}{Path to the submission file.  Must be one of the supported
+formats listed above.}
 }
 \value{
-A single character string containing the file contents.
+A single character string containing the full file contents.
 }
 \description{
-Reads a plain-text student answer from a \code{.txt}, \code{.md}, or
-\code{.pdf} file and returns it as a single character string.
+Reads a plain-text student answer from a file and returns it as a single
+character string.  Supported formats:
+}
+\details{
+\describe{
+  \item{\code{.txt}, \code{.md}, \code{.rmd}, \code{.qmd}}{Read with
+    \code{readLines()}; no additional dependencies required.}
+  \item{\code{.pdf}}{Converted to plain text via
+    \code{pdftools::pdf_text()}.  Requires the \pkg{pdftools} package.
+    Heading styles (bold, font size) are not preserved in the plain-text
+    output; instruct students to use numbered section labels
+    (e.g. \code{Q1:}, \code{1.}) for reliable section detection.}
+}
+
+For automatic file discovery, see \code{\link{find_student_text}}.
+To split the returned text into sections, see
+\code{\link{split_student_text}}.
+}
+\seealso{
+\code{\link{find_student_text}}, \code{\link{split_student_text}},
+  \code{\link{validate_text}}
 }

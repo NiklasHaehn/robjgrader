@@ -7,8 +7,14 @@
 record_stop()
 }
 \value{
-Invisibly NULL. Called for its side effect.
+Invisibly \code{NULL}. Called for its side effect.
 }
 \description{
-Removes the task callback installed by \code{record_start()}.
+Removes the task callback installed by \code{record_start()} and prints
+the number of objects captured.  The records remain accessible via
+\code{get_records()} until the next \code{record_start()} call clears
+them.
+}
+\seealso{
+\code{\link{record_start}}, \code{\link{get_records}}
 }

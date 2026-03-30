@@ -18,7 +18,9 @@ of \code{c("df", "ggplot", "model", "table")}.}
 }
 \value{
 A \code{robjgrader_records} object with a \code{"student_file"}
-  attribute, returned invisibly.
+  attribute (path of the sourced file) and a \code{.used_ids} environment
+  attribute for exclusive object matching, returned invisibly.  Pass this
+  object to all \code{validate()} calls in the same autograder run.
 }
 \description{
 Sources a student R file from the current working directory and builds a
@@ -33,7 +35,6 @@ Detection works both when the autograder is run via
 and when it is loaded interactively via \code{source("autograde.R")} (walks
 \code{sys.calls()}).  Pass \code{autograder_name} to add further exclusions.
 
-The student file path is stored as \code{attr(records, "student_file")} and
-is available to code-inspection functions such as those in
-\file{extract_code.R}.
+The student file path is stored as \code{attr(records, "student_file")}
+for downstream use.
 }

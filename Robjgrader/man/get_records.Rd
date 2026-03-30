@@ -16,10 +16,31 @@ left-hand side of assignments. \code{NULL} (default) returns all names,
 including anonymous visible returns.}
 }
 \value{
-An object of class \code{robjgrader_records} (a named list of
-  record entries).
+An object of class \code{robjgrader_records}.
 }
 \description{
-Returns a list of recorded events. Each element contains event metadata
-and the captured object under \code{$object}.
+Returns all objects captured since the last \code{record_start()} or
+\code{record_script()} call, optionally filtered by type or variable name.
+Each element of the returned list is a record entry with the following
+fields:
+}
+\details{
+\describe{
+  \item{\code{event_id}}{Integer. Sequential capture index.}
+  \item{\code{event_type}}{One of \code{"assignment"},
+    \code{"visible_return"}, \code{"print_call"}, or
+    \code{"invisible_return"}.}
+  \item{\code{object_name}}{Character or \code{NULL}. Variable name from
+    the assignment LHS; \code{NULL} for anonymous expressions.}
+  \item{\code{object_type}}{One of \code{"df"}, \code{"ggplot"},
+    \code{"model"}, \code{"table"}.}
+  \item{\code{object_class}}{First element of \code{class(object)}.}
+  \item{\code{expr_text}}{Deparsed source expression (single line).}
+  \item{\code{timestamp}}{\code{POSIXct} time of capture.}
+  \item{\code{object}}{The captured R object.}
+}
+}
+\seealso{
+\code{\link{record_start}}, \code{\link{record_script}},
+  \code{\link{validate}}
 }

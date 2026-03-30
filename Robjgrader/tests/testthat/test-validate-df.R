@@ -200,9 +200,11 @@ test_that("df: individual checks suppress default groups", {
 
 # ---- lookup ------------------------------------------------------------------
 
-test_that("validate() errors on unknown name", {
+test_that("validate() returns graceful not-found result on unknown name", {
   recs <- df_recs(ref_df, name = "df1")
-  expect_error(validate(recs, name = "no_such_name"), "no_such_name")
+  res  <- validate(recs, name = "no_such_name")
+  expect_false(res$overall)
+  expect_match(res$checks$found$message, "no_such_name")
 })
 
 test_that("validate() selects last record by default (position = 'last')", {

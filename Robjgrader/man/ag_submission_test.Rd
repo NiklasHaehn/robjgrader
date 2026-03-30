@@ -10,6 +10,10 @@ ag_submission_test()
 \code{"SUCCESS"}
 }
 \description{
-Use this as the first test case to confirm the student submission ran
-without errors.
+A zero-cost test case that always passes.  Use it as the first entry in
+\code{test_cases} to verify that the student file was sourced successfully
+and that the autograder infrastructure itself is working.  If
+\code{source_student_file()} throws an error before this function is
+called, Gradescope will report a failed submission rather than a
+zero-score result.
 }

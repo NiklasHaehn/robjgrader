@@ -8,6 +8,7 @@ validate_text(
   text,
   section = NULL,
   n_sections = NULL,
+  match_section = NULL,
   prompt = NULL,
   question = NULL,
   rubric = NULL,
@@ -28,12 +29,22 @@ validate_text(
 questions, identifies which section to grade.  A character value is
 matched against section headings (case-insensitive, partial match
 allowed); an integer selects by position.  When \code{NULL} (default),
-the full text is graded without splitting.}
+the full text is graded without splitting.  Mutually exclusive with
+\code{match_section}.}
 
 \item{n_sections}{Integer or \code{NULL}. Total number of questions in the
 submission.  Used as a hint by \code{split_student_text()} when no
 heading patterns are found (limits blank-line splitting to the first
 \code{n_sections} chunks).}
+
+\item{match_section}{Named list for regex-based section selection.  Use when
+student headings are inconsistent and a fixed label cannot be relied upon.
+Required entry: \code{heading} — a regex pattern matched
+case-insensitively against section headings via \code{grepl(perl = TRUE)}
+(e.g. \code{list(heading = "interpret|gdp|koeffizient")}).  Optional
+entry: \code{min_words} — integer; sections whose body contains fewer
+words than this threshold are skipped.  The first surviving match is used.
+Mutually exclusive with \code{section}.}
 
 \item{prompt}{Character. Full system prompt (Mode A). Mutually exclusive
 with \code{question} and \code{rubric}.}
@@ -44,12 +55,21 @@ with \code{question} and \code{rubric}.}
 grading criterion; its name is the criterion label and its value is the
 description of what a passing answer must demonstrate.}
 
-\item{reference}{Character or file path. An optional model answer used as a
-grading standard.  If a valid file path is supplied, the file is read via
-\code{read_student_text()}.  When provided, the LLM compares the student
-answer against the reference rather than grading against abstract criteria
-alone.  Only used in Mode B (\code{question}/\code{rubric}); ignored in
-Mode A.}
+\item{reference}{Model answer used as a grading standard.  Three forms are
+accepted:
+\describe{
+  \item{Named list}{Extract a specific Markdown section:
+    \code{list(path = "solutions.md", section = "Q3")}.  \code{section}
+    uses case-insensitive partial matching against section headings.}
+  \item{File path (character)}{The whole file is read via
+    \code{read_student_text()}.}
+  \item{Plain character string}{Used directly as the reference text.}
+}
+In Mode B (\code{question}/\code{rubric}) the reference is embedded in the
+auto-generated grading prompt.  In Mode A (\code{prompt}) the reference
+text is appended to the system prompt under the header
+\emph{"REFERENCE ANSWER (use as grading standard)"}, so the model can
+compare the student answer against the reference.}
 
 \item{name}{Character. Label for this result, shown in console output
 and Gradescope.}

@@ -7,19 +7,36 @@
 run_autograder(test_cases, json_path = .autograder_json_path(), verbose = TRUE)
 }
 \arguments{
-\item{test_cases}{A list of test-case lists.  Each entry must contain:
-\describe{
-  \item{\code{name}}{Human-readable criterion label shown to students.}
-  \item{\code{fun}}{The test function: a function object or a character
-    string naming a function visible in the calling environment.}
-  \item{\code{args}}{A list of arguments passed to \code{fun} via
-    \code{do.call}.}
-  \item{\code{expect}}{Expected return value; compared via
-    \code{.ag_to_string()}.}
-  \item{\code{visibility}}{\code{"visible"} (default) or
-    \code{"hidden"}.}
-  \item{\code{weight}}{Point value for this criterion.}
-}}
+\item{test_cases}{A list of test-case lists.  Two interfaces are supported:
+
+  \strong{Result interface} (recommended -- works with \code{validate()} and
+  \code{validate_text()} output):
+  \describe{
+    \item{\code{name}}{Human-readable criterion label shown to students.}
+    \item{\code{result}}{A \code{robjgrader_result} from \code{validate()}
+      or \code{validate_text()}.}
+    \item{\code{max_score}}{Maximum point value for this criterion.  For
+      text results with a normalized \code{score} field (0--1), the actual
+      score is \code{score * max_score}, enabling partial credit.  For all
+      other results, \code{max_score} is awarded in full if
+      \code{overall == TRUE} and 0 otherwise.}
+    \item{\code{visibility}}{Optional. \code{"visible"} (default),
+      \code{"hidden"}, \code{"after_due_date"}, or
+      \code{"after_published"} (Gradescope visibility keys).}
+  }
+
+  \strong{Legacy function interface} (for custom test functions):
+  \describe{
+    \item{\code{name}}{Human-readable criterion label.}
+    \item{\code{fun}}{A function object or character string naming a
+      function in the calling environment.}
+    \item{\code{args}}{A list of arguments passed to \code{fun} via
+      \code{do.call()}.}
+    \item{\code{expect}}{Expected return value; compared as a string via
+      \code{toString()}.}
+    \item{\code{weight}}{Point value for this criterion.}
+    \item{\code{visibility}}{Optional. Same values as above.}
+  }}
 
 \item{json_path}{Output path for the JSON results file.  Defaults to
 \code{"/autograder/results/results.json"} inside a Gradescope container

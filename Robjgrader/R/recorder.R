@@ -204,7 +204,10 @@ print.robjgrader_records <- function(x, ...) {
 #' @param record_table   Record table objects (\pkg{gt}, \pkg{tinytable},
 #'   \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.
 #'
-#' @return A \code{robjgrader_records} object, returned invisibly.
+#' @return A \code{robjgrader_records} object, returned invisibly.  The object
+#'   carries a \code{.used_ids} environment attribute (initially empty) that
+#'   \code{validate()} uses to implement exclusive object matching — each
+#'   student object is matched to at most one grading step per autograder run.
 #' @seealso \code{\link{source_student_file}}, \code{\link{get_records}},
 #'   \code{\link{validate}}
 #' @export
@@ -261,7 +264,9 @@ record_script <- function(
                        ok = ev$ok, visible = ev$visible)
   }
 
-  invisible(structure(.recorder_env$records, class = "robjgrader_records"))
+  recs <- structure(.recorder_env$records, class = "robjgrader_records")
+  attr(recs, ".used_ids") <- new.env(parent = emptyenv())
+  invisible(recs)
 }
 
 

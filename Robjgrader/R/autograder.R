@@ -21,7 +21,9 @@
 #'   of \code{c("df", "ggplot", "model", "table")}.
 #'
 #' @return A \code{robjgrader_records} object with a \code{"student_file"}
-#'   attribute, returned invisibly.
+#'   attribute (path of the sourced file) and a \code{.used_ids} environment
+#'   attribute for exclusive object matching, returned invisibly.  Pass this
+#'   object to all \code{validate()} calls in the same autograder run.
 #' @export
 source_student_file <- function(
   autograder_name = NULL,

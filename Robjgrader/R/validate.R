@@ -3,7 +3,31 @@
 #' Retrieves an object from a \code{robjgrader_records} result and validates
 #' it against a reference object, a set of named checks, or both.
 #'
-#' @param records   A \code{robjgrader_records} object from \code{get_records()}.
+#' @details
+#' \strong{Exclusive matching:} Each student object is matched to at most one
+#' \code{validate()} call per autograder run.  Once a record is matched it is
+#' marked as used, so a second \code{validate()} call with identical criteria
+#' will match the \emph{next best} available candidate rather than reusing the
+#' same object.  This ensures that two separate grading steps targeting the
+#' same type of object (e.g. "first lm" and "second lm") receive distinct
+#' student objects.  The used-object state lives in the
+#' \code{.used_ids} environment attribute of the \code{records} object, which
+#' is initialised automatically by \code{record_script()} and
+#' \code{source_student_file()}.
+#'
+#' \strong{Graceful not-found behaviour:} When no matching object is available
+#' (either because the student never created an object of that type, or all
+#' candidates are already used), \code{validate()} returns a
+#' \code{robjgrader_result} with \code{overall = FALSE} and a descriptive
+#' "not found" message.  It never calls \code{stop()}, so subsequent grading
+#' steps continue to run regardless.
+#'
+#' @param records   A \code{robjgrader_records} object returned by
+#'   \code{record_script()} or \code{source_student_file()}.  The object
+#'   carries a \code{.used_ids} environment attribute that tracks which records
+#'   have already been matched; pass the \emph{same} \code{records} object to
+#'   all \code{validate()} calls within one autograder run to get correct
+#'   exclusive-matching behaviour.
 #' @param name      Character. Variable name of the recorded object. Primary
 #'   identification method.
 #' @param match     Named list of coarse matching criteria used when \code{name}
@@ -92,13 +116,42 @@ validate <- function(
     stop("'name' and 'match' are mutually exclusive.")
   }
 
-  record <- if (!is.null(name)) {
-    .lookup_by_name(records, name, position)
-  } else if (length(match) > 0L) {
-    .lookup_by_match(records, match, position)
-  } else {
-    .lookup_by_reference(records, reference, position)
+  # Filter out records already matched in this session (exclusive assignment)
+  used      <- attr(records, ".used_ids") %||% new.env(parent = emptyenv())
+  available <- Filter(
+    function(r) is.null(used[[as.character(r$event_id)]]),
+    records
+  )
+
+  # Attempt lookup — never stop(), always return a result
+  err_msg <- NULL
+  record  <- tryCatch(
+    {
+      if (!is.null(name))          .lookup_by_name(available, name, position)
+      else if (length(match) > 0L) .lookup_by_match(available, match, position)
+      else                         .lookup_by_reference(available, reference, position)
+    },
+    error = function(e) { err_msg <<- conditionMessage(e); NULL }
+  )
+
+  if (is.null(record)) {
+    obj_type  <- match[["type"]] %||%
+      if (!is.null(reference)) {
+        .classify_object(reference,
+          list(df = TRUE, ggplot = TRUE, model = TRUE, table = TRUE)) %||% "unknown"
+      } else "unknown"
+    obj_label <- name %||% obj_type
+    return(.make_result(
+      obj_label, obj_type, "NULL",
+      list(found = .make_check(
+        "found", FALSE, TRUE, FALSE,
+        sprintf("No available student object found: %s", err_msg %||% "unknown error")
+      ))
+    ))
   }
+
+  # Mark this record as used so it cannot be matched again
+  assign(as.character(record$event_id), TRUE, envir = used)
 
   obj      <- record$object
   obj_type <- record$object_type

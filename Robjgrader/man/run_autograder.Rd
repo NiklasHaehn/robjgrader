@@ -23,6 +23,12 @@ run_autograder(test_cases, json_path = .autograder_json_path(), verbose = TRUE)
     \item{\code{visibility}}{Optional. \code{"visible"} (default),
       \code{"hidden"}, \code{"after_due_date"}, or
       \code{"after_published"} (Gradescope visibility keys).}
+    \item{\code{abort_on_fail}}{Optional logical. If \code{TRUE} and this
+      test case fails (\code{overall != TRUE}), all subsequent test cases
+      are skipped with score 0 and the output
+      \code{"Skipped — prior check failed."}.  Use with
+      \code{\link{flag_submission}} to halt grading when the submission
+      format is incorrect.  Default \code{FALSE}.}
   }
 
   \strong{Legacy function interface} (for custom test functions):

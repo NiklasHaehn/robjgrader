@@ -128,6 +128,67 @@ result_to_outcome <- function(result) {
 ag_submission_test <- function() "SUCCESS"
 
 
+#' Detect wrong-format submission files
+#'
+#' Scans the current working directory for files with the given extension(s).
+#' Returns a failing \code{robjgrader_result} (with your custom message) when
+#' one or more matching files are found, and a passing result otherwise.
+#'
+#' Pair with \code{abort_on_fail = TRUE} in \code{\link{run_autograder}} to
+#' skip all remaining grading steps when a wrong-format file is detected:
+#'
+#' \preformatted{
+#' run_autograder(list(
+#'   list(
+#'     name          = "File format",
+#'     result        = flag_submission("do",
+#'                       message = "Please submit an R script, not a Stata .do file."),
+#'     max_score     = 0,
+#'     abort_on_fail = TRUE
+#'   ),
+#'   list(name = "Q1 model", result = validate(records, ...), max_score = 10),
+#'   ...
+#' ))
+#' }
+#'
+#' @param extensions Character vector of file extensions to flag, with or
+#'   without a leading dot (e.g. \code{c("do", "dta")} or \code{c(".py")}).
+#' @param message    Character. Message shown to the student when a matching
+#'   file is found.  If \code{NULL} (default), an informative message listing
+#'   the detected filenames is generated automatically.
+#' @param name       Character. Label for this check in the result object.
+#'   Default \code{"submission_check"}.
+#'
+#' @return A \code{robjgrader_result} with \code{overall = FALSE} and the
+#'   supplied message when a flagged file is found, or \code{overall = TRUE}
+#'   when the submission directory is clean.
+#' @export
+flag_submission <- function(extensions, message = NULL, name = "submission_check") {
+  exts <- unique(sub("^\\.?", ".", as.character(extensions)))
+  pat  <- paste0("\\", exts, "$", collapse = "|")
+
+  found <- list.files(pattern = pat, ignore.case = TRUE)
+
+  if (length(found) == 0L) {
+    return(.make_result(
+      name, "submission", "none",
+      list(format = .make_check("format", TRUE, "none", "none",
+                                "No wrong-format files detected."))
+    ))
+  }
+
+  msg <- message %||% sprintf(
+    "Wrong file type detected: %s. Please submit an R script (.R).",
+    paste(found, collapse = ", ")
+  )
+
+  .make_result(
+    name, "submission", found[[1L]],
+    list(format = .make_check("format", FALSE, "none", found, msg))
+  )
+}
+
+
 #' Run autograder test cases and write Gradescope-compatible JSON
 #'
 #' Iterates over \code{test_cases}, calls each test function, compares the
@@ -151,6 +212,12 @@ ag_submission_test <- function() "SUCCESS"
 #'     \item{\code{visibility}}{Optional. \code{"visible"} (default),
 #'       \code{"hidden"}, \code{"after_due_date"}, or
 #'       \code{"after_published"} (Gradescope visibility keys).}
+#'     \item{\code{abort_on_fail}}{Optional logical. If \code{TRUE} and this
+#'       test case fails (\code{overall != TRUE}), all subsequent test cases
+#'       are skipped with score 0 and the output
+#'       \code{"Skipped — prior check failed."}.  Use with
+#'       \code{\link{flag_submission}} to halt grading when the submission
+#'       format is incorrect.  Default \code{FALSE}.}
 #'   }
 #'
 #'   \strong{Legacy function interface} (for custom test functions):
@@ -215,6 +282,19 @@ run_autograder <- function(test_cases,
       if (!is.null(tc[["visibility"]]) && tc[["visibility"]] != "visible")
         entry[["visibility"]] <- tc[["visibility"]]
       results[["tests"]][[i]] <- entry
+
+      if (isTRUE(tc[["abort_on_fail"]]) && !isTRUE(res$overall)) {
+        for (j in seq_len(length(test_cases) - i) + i) {
+          tc_j <- test_cases[[j]]
+          results[["tests"]][[j]] <- list(
+            name      = tc_j[["name"]] %||% paste("Test", j),
+            score     = 0,
+            max_score = tc_j[["max_score"]] %||% tc_j[["weight"]] %||% 0,
+            output    = "Skipped — prior check failed."
+          )
+        }
+        break
+      }
       next
     }
 
@@ -243,6 +323,19 @@ run_autograder <- function(test_cases,
       entry[["visibility"]] <- tc[["visibility"]]
 
     results[["tests"]][[i]] <- entry
+
+    if (isTRUE(tc[["abort_on_fail"]]) && !passed) {
+      for (j in seq_len(length(test_cases) - i) + i) {
+        tc_j <- test_cases[[j]]
+        results[["tests"]][[j]] <- list(
+          name      = tc_j[["name"]] %||% paste("Test", j),
+          score     = 0,
+          max_score = tc_j[["max_score"]] %||% tc_j[["weight"]] %||% 0,
+          output    = "Skipped — prior check failed."
+        )
+      }
+      break
+    }
   }
 
   if (verbose) .print_results(test_cases, results)

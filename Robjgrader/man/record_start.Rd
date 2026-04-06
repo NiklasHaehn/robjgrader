@@ -8,7 +8,8 @@ record_start(
   record_df = TRUE,
   record_ggplot = TRUE,
   record_model = TRUE,
-  record_table = TRUE
+  record_table = TRUE,
+  record_baseplot = TRUE
 )
 }
 \arguments{
@@ -21,6 +22,10 @@ record_start(
 
 \item{record_table}{Record table objects (\pkg{gt}, \pkg{tinytable},
 \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.}
+
+\item{record_baseplot}{Record base R plot calls (\code{plot()},
+\code{hist()}, \code{barplot()}, \code{boxplot()}, etc.). Default
+\code{TRUE}.}
 }
 \value{
 Invisibly \code{NULL}. Called for its side effect.

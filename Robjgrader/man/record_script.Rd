@@ -11,7 +11,8 @@ record_script(
   record_df = TRUE,
   record_ggplot = TRUE,
   record_model = TRUE,
-  record_table = TRUE
+  record_table = TRUE,
+  record_baseplot = TRUE
 )
 }
 \arguments{
@@ -33,6 +34,10 @@ each failing expression emits a warning and evaluation continues.}
 
 \item{record_table}{Record table objects (\pkg{gt}, \pkg{tinytable},
 \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.}
+
+\item{record_baseplot}{Record base R plot calls (\code{plot()},
+\code{hist()}, \code{barplot()}, \code{boxplot()}, etc.). Default
+\code{TRUE}.}
 }
 \value{
 A \code{robjgrader_records} object, returned invisibly.  The object

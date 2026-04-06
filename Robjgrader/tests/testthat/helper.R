@@ -1,13 +1,13 @@
 # Shared helper: build a minimal robjgrader_records object from a list of
 # (object, name) pairs without needing the live task callback.
-make_records <- function(...) {
+make_records <- function(..., exclusive = FALSE) {
   items <- list(...)
   recs  <- vector("list", length(items))
   for (i in seq_along(items)) {
     it  <- items[[i]]
     obj <- it$obj
     nm  <- it$name
-    tp  <- .classify_object(obj, list(df=TRUE, ggplot=TRUE, model=TRUE, table=TRUE))
+    tp  <- .classify_object(obj, list(df=TRUE, ggplot=TRUE, model=TRUE, table=TRUE, baseplot=TRUE))
     recs[[i]] <- list(
       event_id    = i,
       event_type  = if (!is.null(nm)) "assignment" else "visible_return",
@@ -19,5 +19,7 @@ make_records <- function(...) {
       object      = obj
     )
   }
-  structure(recs, class = "robjgrader_records")
+  out <- structure(recs, class = "robjgrader_records")
+  if (exclusive) attr(out, ".used_ids") <- new.env(parent = emptyenv())
+  out
 }

@@ -138,7 +138,8 @@ validate <- function(
     obj_type  <- match[["type"]] %||%
       if (!is.null(reference)) {
         .classify_object(reference,
-          list(df = TRUE, ggplot = TRUE, model = TRUE, table = TRUE)) %||% "unknown"
+          list(df = TRUE, ggplot = TRUE, model = TRUE, table = TRUE,
+               baseplot = TRUE)) %||% "unknown"
       } else "unknown"
     obj_label <- name %||% obj_type
     return(.make_result(
@@ -158,10 +159,11 @@ validate <- function(
   obj_name <- record$object_name %||% "<anonymous>"
 
   switch(obj_type,
-    df     = .validate_df(obj, reference, checks, exclude, obj_name),
-    ggplot = .validate_plot(obj, reference, checks, exclude, obj_name),
-    model  = .validate_model(obj, reference, checks, exclude, obj_name),
-    table  = .validate_table(obj, reference, checks, exclude, obj_name),
+    df       = .validate_df(obj, reference, checks, exclude, obj_name),
+    ggplot   = .validate_plot(obj, reference, checks, exclude, obj_name),
+    model    = .validate_model(obj, reference, checks, exclude, obj_name),
+    table    = .validate_table(obj, reference, checks, exclude, obj_name),
+    baseplot = .validate_baseplot(obj, reference, checks, exclude, obj_name),
     stop(sprintf("No validator available for type '%s'.", obj_type))
   )
 }
@@ -192,12 +194,13 @@ validate <- function(
 
   # Default criterion order per type (most to least discriminating)
   order_map <- list(
-    ggplot = c("aes_x", "aes_y", "geom", "aes_color", "aes_colour",
-               "aes_fill", "facet_var", "expr_contains"),
-    model  = c("outcome", "estimator", "fixed_effects", "predictors",
-               "cluster", "nobs", "expr_contains"),
-    df     = c("names", "nrow", "ncol", "col_types", "expr_contains"),
-    table  = c("n_models", "terms", "nrow", "ncol", "expr_contains")
+    ggplot   = c("aes_x", "aes_y", "geom", "aes_color", "aes_colour",
+                 "aes_fill", "facet_var", "expr_contains"),
+    model    = c("outcome", "estimator", "fixed_effects", "predictors",
+                 "cluster", "nobs", "expr_contains"),
+    df       = c("names", "nrow", "ncol", "col_types", "expr_contains"),
+    table    = c("n_models", "terms", "nrow", "ncol", "expr_contains"),
+    baseplot = c("plot_type", "aes_x", "aes_y", "expr_contains")
   )
   criterion_order <- order_map[[type]] %||% character(0L)
 
@@ -231,7 +234,7 @@ validate <- function(
 
 
 .lookup_by_reference <- function(records, reference, position) {
-  cfg  <- list(df = TRUE, ggplot = TRUE, model = TRUE, table = TRUE)
+  cfg  <- list(df = TRUE, ggplot = TRUE, model = TRUE, table = TRUE, baseplot = TRUE)
   type <- .classify_object(reference, cfg)
   if (is.null(type))
     stop("Cannot determine type of reference object for automatic matching.")
@@ -268,6 +271,11 @@ validate <- function(
     if (length(fes) > 0L) m$fixed_effects <- fes
     cl          <- tryCatch(.get_cluster(reference),          error = function(e) NULL)
     if (!is.null(cl) && length(cl) > 0L) m$cluster <- cl
+
+  } else if (type == "baseplot") {
+    m$plot_type <- reference$plot_type
+    if (!is.null(reference$x_expr)) m$aes_x <- reference$x_expr
+    if (!is.null(reference$y_expr)) m$aes_y <- reference$y_expr
   }
   # table: no structural match criteria implemented yet
 
@@ -290,6 +298,8 @@ validate <- function(
         .match_model(obj, key, value)
       } else if (type == "df") {
         .match_df(obj, key, value)
+      } else if (type == "baseplot") {
+        .match_baseplot(obj, key, value)
       } else {
         TRUE
       }
@@ -331,6 +341,14 @@ validate <- function(
   if (key == "nrow")  return(isTRUE(nrow(obj) == value))
   if (key == "ncol")  return(isTRUE(ncol(obj) == value))
   if (key == "names") return(all(value %in% names(obj)))
+  TRUE
+}
+
+
+.match_baseplot <- function(obj, key, value) {
+  if (key == "plot_type") return(isTRUE(obj$plot_type == value))
+  if (key == "aes_x")     return(!is.null(obj$x_expr) && obj$x_expr == value)
+  if (key == "aes_y")     return(!is.null(obj$y_expr) && obj$y_expr == value)
   TRUE
 }
 

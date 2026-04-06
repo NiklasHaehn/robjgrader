@@ -6,7 +6,19 @@
 .recorder_env$config  <- list()
 .recorder_env$envir   <- NULL   # evaluation environment; set on each recording start
 
-.recordable_types <- c("df", "ggplot", "model", "table")
+.recordable_types <- c("df", "ggplot", "model", "table", "baseplot")
+
+# Maps base R plot function names to canonical plot-type strings.
+.base_plot_fns <- c(
+  plot       = "scatter",
+  hist       = "histogram",
+  barplot    = "bar",
+  boxplot    = "boxplot",
+  pie        = "pie",
+  stripchart = "strip",
+  dotchart   = "dotchart",
+  curve      = "curve"
+)
 
 
 #' Start recording analytical objects
@@ -30,22 +42,26 @@
 #' while a recording is already active emits a warning and returns without
 #' resetting the existing session.
 #'
-#' @param record_df      Record data frames and tibbles. Default \code{TRUE}.
-#' @param record_ggplot  Record \pkg{ggplot2} objects. Default \code{TRUE}.
-#' @param record_model   Record model objects (\code{lm}, \code{glm},
+#' @param record_df       Record data frames and tibbles. Default \code{TRUE}.
+#' @param record_ggplot   Record \pkg{ggplot2} objects. Default \code{TRUE}.
+#' @param record_model    Record model objects (\code{lm}, \code{glm},
 #'   \code{fixest}, \code{lmerMod}, \code{glmerMod}). Default \code{TRUE}.
-#' @param record_table   Record table objects (\pkg{gt}, \pkg{tinytable},
+#' @param record_table    Record table objects (\pkg{gt}, \pkg{tinytable},
 #'   \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.
+#' @param record_baseplot Record base R plot calls (\code{plot()},
+#'   \code{hist()}, \code{barplot()}, \code{boxplot()}, etc.). Default
+#'   \code{TRUE}.
 #'
 #' @return Invisibly \code{NULL}. Called for its side effect.
 #' @seealso \code{\link{record_stop}}, \code{\link{get_records}},
 #'   \code{\link{record_script}}, \code{\link{source_student_file}}
 #' @export
 record_start <- function(
-  record_df     = TRUE,
-  record_ggplot = TRUE,
-  record_model  = TRUE,
-  record_table  = TRUE
+  record_df       = TRUE,
+  record_ggplot   = TRUE,
+  record_model    = TRUE,
+  record_table    = TRUE,
+  record_baseplot = TRUE
 ) {
   if (.recorder_env$active) {
     warning("Recording is already active. Call record_stop() first.")
@@ -56,10 +72,11 @@ record_start <- function(
   .recorder_env$records <- list()
   .recorder_env$counter <- 0L
   .recorder_env$config  <- list(
-    df     = record_df,
-    ggplot = record_ggplot,
-    model  = record_model,
-    table  = record_table
+    df       = record_df,
+    ggplot   = record_ggplot,
+    model    = record_model,
+    table    = record_table,
+    baseplot = record_baseplot
   )
   .recorder_env$envir <- .GlobalEnv
 
@@ -197,12 +214,15 @@ print.robjgrader_records <- function(x, ...) {
 #' @param stop_on_error Logical. If \code{TRUE}, the first error in the script
 #'   halts evaluation and re-throws the error. If \code{FALSE} (default),
 #'   each failing expression emits a warning and evaluation continues.
-#' @param record_df      Record data frames and tibbles. Default \code{TRUE}.
-#' @param record_ggplot  Record \pkg{ggplot2} objects. Default \code{TRUE}.
-#' @param record_model   Record model objects (\code{lm}, \code{glm},
+#' @param record_df       Record data frames and tibbles. Default \code{TRUE}.
+#' @param record_ggplot   Record \pkg{ggplot2} objects. Default \code{TRUE}.
+#' @param record_model    Record model objects (\code{lm}, \code{glm},
 #'   \code{fixest}, \code{lmerMod}, \code{glmerMod}). Default \code{TRUE}.
-#' @param record_table   Record table objects (\pkg{gt}, \pkg{tinytable},
+#' @param record_table    Record table objects (\pkg{gt}, \pkg{tinytable},
 #'   \pkg{flextable}, \pkg{huxtable}). Default \code{TRUE}.
+#' @param record_baseplot Record base R plot calls (\code{plot()},
+#'   \code{hist()}, \code{barplot()}, \code{boxplot()}, etc.). Default
+#'   \code{TRUE}.
 #'
 #' @return A \code{robjgrader_records} object, returned invisibly.  The object
 #'   carries a \code{.used_ids} environment attribute (initially empty) that
@@ -213,12 +233,13 @@ print.robjgrader_records <- function(x, ...) {
 #' @export
 record_script <- function(
   path,
-  envir         = .GlobalEnv,
-  stop_on_error = FALSE,
-  record_df     = TRUE,
-  record_ggplot = TRUE,
-  record_model  = TRUE,
-  record_table  = TRUE
+  envir           = .GlobalEnv,
+  stop_on_error   = FALSE,
+  record_df       = TRUE,
+  record_ggplot   = TRUE,
+  record_model    = TRUE,
+  record_table    = TRUE,
+  record_baseplot = TRUE
 ) {
   if (!file.exists(path))
     stop(sprintf("File not found: '%s'", path))
@@ -229,10 +250,11 @@ record_script <- function(
   .recorder_env$records <- list()
   .recorder_env$counter <- 0L
   .recorder_env$config  <- list(
-    df     = record_df,
-    ggplot = record_ggplot,
-    model  = record_model,
-    table  = record_table
+    df       = record_df,
+    ggplot   = record_ggplot,
+    model    = record_model,
+    table    = record_table,
+    baseplot = record_baseplot
   )
   .recorder_env$envir <- envir
 
@@ -295,6 +317,27 @@ record_script <- function(
     }
   }
 
+  # -- Base R plot interception -------------------------------------------------
+  # Base R plot functions return NULL invisibly, so they must be detected from
+  # the expression rather than the return value.
+  if (isTRUE(.recorder_env$config$baseplot) && .is_base_plot_call(expr)) {
+    bp <- .make_baseplot_descriptor(expr, .recorder_env$envir %||% globalenv())
+    if (!is.null(bp)) {
+      .recorder_env$counter <- .recorder_env$counter + 1L
+      .recorder_env$records[[.recorder_env$counter]] <- list(
+        event_id     = .recorder_env$counter,
+        event_type   = "visible_return",
+        object_name  = NULL,
+        object_type  = "baseplot",
+        object_class = bp$plot_type,
+        expr_text    = deparse(expr, nlines = 1L),
+        timestamp    = Sys.time(),
+        object       = bp
+      )
+    }
+    return(TRUE)
+  }
+
   if (is.null(value)) return(TRUE)
 
   obj_type <- .classify_object(value, .recorder_env$config)
@@ -334,10 +377,11 @@ record_script <- function(
 
 
 .classify_object <- function(value, config) {
-  if (config$ggplot && inherits(value, "ggplot"))                             return("ggplot")
-  if (config$df     && inherits(value, c("data.frame", "tbl_df", "tbl")))     return("df")
-  if (config$model  && inherits(value, c("lm", "glm", "fixest", "lmerMod", "glmerMod"))) return("model")
-  if (config$table  && inherits(value, c("gt_tbl", "tinytable", "flextable", "huxtable"))) return("table")
+  if (isTRUE(config$baseplot) && inherits(value, "robjgrader_baseplot"))      return("baseplot")
+  if (isTRUE(config$ggplot)   && inherits(value, "ggplot"))                   return("ggplot")
+  if (isTRUE(config$df)       && inherits(value, c("data.frame", "tbl_df", "tbl"))) return("df")
+  if (isTRUE(config$model)    && inherits(value, c("lm", "glm", "fixest", "lmerMod", "glmerMod"))) return("model")
+  if (isTRUE(config$table)    && inherits(value, c("gt_tbl", "tinytable", "flextable", "huxtable"))) return("table")
   NULL
 }
 
@@ -358,4 +402,89 @@ record_script <- function(
 .is_print_call <- function(expr) {
   if (!is.call(expr)) return(FALSE)
   as.character(expr[[1L]]) %in% c("print", "show")
+}
+
+
+# -- Base R plot helpers -------------------------------------------------------
+
+.is_base_plot_call <- function(expr) {
+  if (!is.call(expr)) return(FALSE)
+  fn <- as.character(expr[[1L]])
+  # Allow qualified calls like graphics::plot
+  fn_bare <- sub("^.*::", "", fn)
+  fn_bare %in% names(.base_plot_fns)
+}
+
+
+.make_baseplot_descriptor <- function(expr, envir) {
+  fn_name <- sub("^.*::", "", as.character(expr[[1L]]))
+  plot_type <- .base_plot_fns[[fn_name]]
+
+  # Named argument list (without function name)
+  call_args <- as.list(expr[-1L])
+  arg_names <- names(call_args)
+  if (is.null(arg_names)) arg_names <- rep("", length(call_args))
+
+  # Positional arguments get names based on function formals
+  fn_obj <- tryCatch(get(fn_name, envir = baseenv()), error = function(e) NULL)
+  if (!is.null(fn_obj)) {
+    formal_names <- names(formals(fn_obj))
+    for (i in seq_along(arg_names)) {
+      if (arg_names[i] == "" && i <= length(formal_names))
+        arg_names[i] <- formal_names[i]
+    }
+  }
+  names(call_args) <- arg_names
+
+  # Refine plot_type for plot() based on 'type' argument and first arg content
+  if (fn_name == "plot") {
+    type_arg <- call_args[["type"]]
+    if (!is.null(type_arg)) {
+      type_val <- tryCatch(as.character(eval(type_arg, envir = envir)),
+                           error = function(e) "p")
+      plot_type <- switch(type_val,
+        l = "line", b = "both", s = "step", h = "histogram-like",
+        "scatter"
+      )
+    }
+    # Detect plot(density(x)) → density
+    x_arg <- call_args[["x"]] %||% call_args[[1L]]
+    if (!is.null(x_arg) && is.call(x_arg)) {
+      inner_fn <- tryCatch(as.character(x_arg[[1L]]), error = function(e) "")
+      if (inner_fn == "density") plot_type <- "density"
+    }
+  }
+
+  # Extract x and y expression strings
+  x_arg <- call_args[["x"]] %||%
+    if (length(call_args) >= 1L) call_args[[1L]] else NULL
+  y_arg <- if (fn_name %in% c("hist", "barplot", "boxplot",
+                               "pie", "stripchart", "dotchart")) {
+    NULL
+  } else {
+    call_args[["y"]] %||%
+      if (length(call_args) >= 2L) call_args[[2L]] else NULL
+  }
+
+  x_expr <- if (!is.null(x_arg)) deparse(x_arg, nlines = 1L) else NULL
+  y_expr <- if (!is.null(y_arg)) deparse(y_arg, nlines = 1L) else NULL
+
+  # Aesthetic parameters: evaluate where possible, fall back to deparsed string
+  aes_keys <- c("col", "color", "colour", "pch", "type", "lty", "lwd", "cex",
+                "xlab", "ylab", "main", "xlim", "ylim", "bg", "las", "axes",
+                "border", "breaks")
+  aes <- list()
+  for (k in aes_keys) {
+    v <- call_args[[k]]
+    if (!is.null(v)) {
+      aes[[k]] <- tryCatch(eval(v, envir = envir), error = function(e) deparse(v))
+    }
+  }
+
+  structure(list(
+    plot_type = plot_type,
+    x_expr    = x_expr,
+    y_expr    = y_expr,
+    aes       = aes
+  ), class = "robjgrader_baseplot")
 }

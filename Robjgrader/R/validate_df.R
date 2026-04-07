@@ -42,55 +42,60 @@
   chk <- resolved$checks
 
   if (!is.null(chk$nrow)) {
-    exp <- chk$nrow; obs <- nrow(obj)
+    sp  <- .parse_check_spec(chk$nrow); exp <- sp$value
+    obs <- nrow(obj)
     results[["nrow"]] <- .make_check(
       "nrow", obs == exp, exp, obs,
-      sprintf("nrow: expected %d, found %d", exp, obs)
+      sprintf("nrow: expected %d, found %d", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk$ncol)) {
-    exp <- chk$ncol; obs <- ncol(obj)
+    sp  <- .parse_check_spec(chk$ncol); exp <- sp$value
+    obs <- ncol(obj)
     results[["ncol"]] <- .make_check(
       "ncol", obs == exp, exp, obs,
-      sprintf("ncol: expected %d, found %d", exp, obs)
+      sprintf("ncol: expected %d, found %d", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk$names)) {
-    exp     <- chk$names
+    sp      <- .parse_check_spec(chk$names); exp <- sp$value
     missing <- setdiff(exp, names(obj))
     pass    <- length(missing) == 0L
     results[["names"]] <- .make_check(
       "names", pass, exp, names(obj),
       if (pass) sprintf("all required columns present: %s", paste(exp, collapse = ", "))
-      else      sprintf("missing columns: %s", paste(missing, collapse = ", "))
+      else      sprintf("missing columns: %s", paste(missing, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$col_order)) {
-    if (isTRUE(chk$col_order)) {
+    sp  <- .parse_check_spec(chk$col_order); val <- sp$value
+    if (isTRUE(val)) {
       if (is.null(reference)) stop("col_order = TRUE requires a reference object.")
       exp <- names(reference); obs <- names(obj)
     } else {
-      exp <- chk$col_order; obs <- names(obj)
+      exp <- val; obs <- names(obj)
     }
     pass <- identical(obs, exp)
     results[["col_order"]] <- .make_check(
       "col_order", pass, exp, obs,
       if (pass) "column order correct"
       else      sprintf("column order differs: expected {%s}, found {%s}",
-                        paste(exp, collapse = ", "), paste(obs, collapse = ", "))
+                        paste(exp, collapse = ", "), paste(obs, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$col_types)) {
-    exp     <- chk$col_types
+    sp  <- .parse_check_spec(chk$col_types); exp <- sp$value
     missing <- setdiff(names(exp), names(obj))
     if (length(missing) > 0L) {
       results[["col_types"]] <- .make_check(
         "col_types", FALSE, exp, NULL,
-        sprintf("columns not found: %s", paste(missing, collapse = ", "))
+        sprintf("columns not found: %s", paste(missing, collapse = ", ")), sp$weight
       )
     } else {
       type_ok    <- vapply(names(exp), function(col) inherits(obj[[col]], exp[[col]]), logical(1L))
@@ -101,13 +106,14 @@
         "col_types", all(type_ok), exp,
         vapply(names(exp), function(col) class(obj[[col]])[1L], character(1L)),
         if (all(type_ok)) "all column types correct"
-        else              sprintf("type mismatch: %s", paste(mismatches, collapse = "; "))
+        else              sprintf("type mismatch: %s", paste(mismatches, collapse = "; ")),
+        sp$weight
       )
     }
   }
 
   if (!is.null(chk$values)) {
-    exp        <- chk$values
+    sp  <- .parse_check_spec(chk$values); exp <- sp$value
     col_checks <- lapply(names(exp), function(col) {
       if (!col %in% names(obj))
         return(list(pass = FALSE, msg = sprintf("column '%s' not found", col)))
@@ -121,12 +127,14 @@
       "values", pass, exp, NULL,
       if (pass) "all specified column values match"
       else paste(vapply(Filter(function(r) !r$pass, col_checks), `[[`, character(1L), "msg"),
-                 collapse = "; ")
+                 collapse = "; "),
+      sp$weight
     )
   }
 
   if (!is.null(chk$row_order)) {
-    if (isTRUE(chk$row_order)) {
+    sp  <- .parse_check_spec(chk$row_order); val <- sp$value
+    if (isTRUE(val)) {
       if (is.null(reference)) stop("row_order = TRUE requires a reference object.")
       obs_keys <- do.call(paste, as.list(obj))
       ref_keys <- do.call(paste, as.list(reference))
@@ -134,15 +142,16 @@
       results[["row_order"]] <- .make_check(
         "row_order", pass, "<reference order>", NULL,
         if (pass) "row order matches reference"
-        else      "row order does not match reference"
+        else      "row order does not match reference",
+        sp$weight
       )
     } else {
-      sort_cols <- chk$row_order
+      sort_cols <- val
       missing   <- setdiff(sort_cols, names(obj))
       if (length(missing) > 0L) {
         results[["row_order"]] <- .make_check(
           "row_order", FALSE, sort_cols, NULL,
-          sprintf("sort columns not found: %s", paste(missing, collapse = ", "))
+          sprintf("sort columns not found: %s", paste(missing, collapse = ", ")), sp$weight
         )
       } else {
         sorted  <- obj[do.call(order, as.list(obj[sort_cols])), , drop = FALSE]
@@ -150,7 +159,8 @@
         results[["row_order"]] <- .make_check(
           "row_order", pass, sort_cols, NULL,
           if (pass) sprintf("rows correctly sorted by: %s", paste(sort_cols, collapse = ", "))
-          else      sprintf("rows not sorted by: %s", paste(sort_cols, collapse = ", "))
+          else      sprintf("rows not sorted by: %s", paste(sort_cols, collapse = ", ")),
+          sp$weight
         )
       }
     }

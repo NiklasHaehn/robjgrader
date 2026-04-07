@@ -48,20 +48,21 @@
 
   # plot_type
   if (!is.null(chk[["plot_type"]])) {
-    expected <- chk[["plot_type"]]
+    sp       <- .parse_check_spec(chk[["plot_type"]]); expected <- sp$value
     observed <- obj$plot_type %||% "<unknown>"
     pass     <- isTRUE(observed == expected)
     results[["plot_type"]] <- .make_check(
       "plot_type", pass, expected, observed,
       if (pass) sprintf("plot_type correct: '%s'", expected)
-      else      sprintf("plot_type: expected '%s', found '%s'", expected, observed)
+      else      sprintf("plot_type: expected '%s', found '%s'", expected, observed),
+      sp$weight
     )
   }
 
   # aes_x / aes_y
   for (key in c("aes_x", "aes_y")) {
     if (!is.null(chk[[key]])) {
-      expected <- chk[[key]]
+      sp       <- .parse_check_spec(chk[[key]]); expected <- sp$value
       observed <- if (key == "aes_x") obj$x_expr else obj$y_expr
       pass     <- !is.null(observed) && observed == expected
       results[[key]] <- .make_check(
@@ -73,7 +74,8 @@
           sprintf("%s: '%s' not found -- no %s argument", key, expected,
                   if (key == "aes_x") "x" else "y")
         else
-          sprintf("%s: expected '%s', found '%s'", key, expected, observed)
+          sprintf("%s: expected '%s', found '%s'", key, expected, observed),
+        sp$weight
       )
     }
   }
@@ -83,12 +85,11 @@
                       "xlab", "ylab", "main", "lty", "lwd", "cex")
   for (key in aes_check_keys) {
     if (!is.null(chk[[key]])) {
-      expected   <- chk[[key]]
+      sp         <- .parse_check_spec(chk[[key]]); expected <- sp$value
       lookup_key <- if (key %in% c("color", "colour")) "col" else key
-      # Also check 'color' and 'colour' aliases stored under col
-      observed <- obj$aes[[lookup_key]] %||% obj$aes[["color"]] %||% obj$aes[["colour"]]
+      observed   <- obj$aes[[lookup_key]] %||% obj$aes[["color"]] %||% obj$aes[["colour"]]
       if (key == "col") observed <- obj$aes[["col"]] %||% obj$aes[["color"]] %||% obj$aes[["colour"]]
-      pass     <- !is.null(observed) && identical(observed, expected)
+      pass       <- !is.null(observed) && identical(observed, expected)
       results[[key]] <- .make_check(
         key, pass, expected,
         observed %||% "<not set>",
@@ -98,7 +99,8 @@
           sprintf("%s: '%s' not set in plot call", key, as.character(expected))
         else
           sprintf("%s: expected '%s', found '%s'", key,
-                  as.character(expected), as.character(observed))
+                  as.character(expected), as.character(observed)),
+        sp$weight
       )
     }
   }

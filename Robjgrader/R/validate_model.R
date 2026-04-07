@@ -68,221 +68,255 @@
   chk <- resolved$checks
 
   if (!is.null(chk$estimator)) {
-    pass <- inherits(obj, chk$estimator)
+    sp   <- .parse_check_spec(chk$estimator); exp <- sp$value
+    pass <- inherits(obj, exp)
     results[["estimator"]] <- .make_check(
-      "estimator", pass, chk$estimator, cls,
-      sprintf("estimator: expected '%s', found '%s'", chk$estimator, cls)
+      "estimator", pass, exp, cls,
+      sprintf("estimator: expected '%s', found '%s'", exp, cls), sp$weight
     )
   }
 
   if (!is.null(chk$family)) {
+    sp      <- .parse_check_spec(chk$family); exp <- sp$value
     obs_fam <- if (is_glm || is_glmer) family(obj)$family else "<not a glm>"
-    pass    <- obs_fam == chk$family
+    pass    <- obs_fam == exp
     results[["family"]] <- .make_check(
-      "family", pass, chk$family, obs_fam,
-      sprintf("family: expected '%s', found '%s'", chk$family, obs_fam)
+      "family", pass, exp, obs_fam,
+      sprintf("family: expected '%s', found '%s'", exp, obs_fam), sp$weight
     )
   }
 
   if (!is.null(chk$link)) {
+    sp       <- .parse_check_spec(chk$link); exp <- sp$value
     obs_link <- if (is_glm || is_glmer) family(obj)$link else "<not a glm>"
-    pass     <- obs_link == chk$link
+    pass     <- obs_link == exp
     results[["link"]] <- .make_check(
-      "link", pass, chk$link, obs_link,
-      sprintf("link: expected '%s', found '%s'", chk$link, obs_link)
+      "link", pass, exp, obs_link,
+      sprintf("link: expected '%s', found '%s'", exp, obs_link), sp$weight
     )
   }
 
   if (!is.null(chk$outcome)) {
+    sp      <- .parse_check_spec(chk$outcome); exp <- sp$value
     obs_out <- .get_model_outcome(obj)
-    pass    <- !is.null(obs_out) && obs_out == chk$outcome
+    pass    <- !is.null(obs_out) && obs_out == exp
     results[["outcome"]] <- .make_check(
-      "outcome", pass, chk$outcome,
+      "outcome", pass, exp,
       obs_out %||% "<unknown>",
-      sprintf("outcome: expected '%s', found '%s'", chk$outcome, obs_out %||% "<unknown>")
+      sprintf("outcome: expected '%s', found '%s'", exp, obs_out %||% "<unknown>"),
+      sp$weight
     )
   }
 
   if (!is.null(chk$predictors)) {
+    sp      <- .parse_check_spec(chk$predictors); exp <- sp$value
     obs     <- .get_model_rhs_vars(obj)
-    missing <- setdiff(chk$predictors, obs)
+    missing <- setdiff(exp, obs)
     pass    <- length(missing) == 0L
     results[["predictors"]] <- .make_check(
-      "predictors", pass, chk$predictors, obs,
-      if (pass) sprintf("all predictors present: %s", paste(chk$predictors, collapse = ", "))
-      else      sprintf("missing predictors: %s", paste(missing, collapse = ", "))
+      "predictors", pass, exp, obs,
+      if (pass) sprintf("all predictors present: %s", paste(exp, collapse = ", "))
+      else      sprintf("missing predictors: %s", paste(missing, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$n_predictors)) {
+    sp   <- .parse_check_spec(chk$n_predictors); exp <- sp$value
     obs  <- length(.get_model_rhs_vars(obj))
-    pass <- obs == chk$n_predictors
+    pass <- obs == exp
     results[["n_predictors"]] <- .make_check(
-      "n_predictors", pass, chk$n_predictors, obs,
-      sprintf("n_predictors: expected %d, found %d", chk$n_predictors, obs)
+      "n_predictors", pass, exp, obs,
+      sprintf("n_predictors: expected %d, found %d", exp, obs), sp$weight
     )
   }
 
-  if (isTRUE(chk$predictors_only)) {
-    obs_vars  <- .get_model_rhs_vars(obj)
-    exp_vars  <- chk$predictors %||% character(0L)
-    extra     <- setdiff(obs_vars, exp_vars)
-    pass      <- length(extra) == 0L
-    results[["predictors_only"]] <- .make_check(
-      "predictors_only", pass, exp_vars, obs_vars,
-      if (pass) "no extra predictors found"
-      else      sprintf("unexpected predictors: %s", paste(extra, collapse = ", "))
-    )
+  if (!is.null(chk$predictors_only)) {
+    sp       <- .parse_check_spec(chk$predictors_only); val <- sp$value
+    if (isTRUE(val)) {
+      obs_vars  <- .get_model_rhs_vars(obj)
+      exp_vars  <- if (!is.null(chk$predictors)) {
+        .parse_check_spec(chk$predictors)$value
+      } else character(0L)
+      extra <- setdiff(obs_vars, exp_vars)
+      pass  <- length(extra) == 0L
+      results[["predictors_only"]] <- .make_check(
+        "predictors_only", pass, exp_vars, obs_vars,
+        if (pass) "no extra predictors found"
+        else      sprintf("unexpected predictors: %s", paste(extra, collapse = ", ")),
+        sp$weight
+      )
+    }
   }
 
   if (!is.null(chk$interactions)) {
+    sp         <- .parse_check_spec(chk$interactions); exp <- sp$value
     obs_labels <- .get_model_term_labels(obj)
     obs_ints   <- obs_labels[grepl(":", obs_labels, fixed = TRUE)]
-    is_missing <- vapply(chk$interactions, function(int) {
+    is_missing <- vapply(exp, function(int) {
       parts <- sort(strsplit(int, ":", fixed = TRUE)[[1L]])
-      !any(vapply(obs_ints, function(obs)
-        identical(sort(strsplit(obs, ":", fixed = TRUE)[[1L]]), parts), logical(1L)))
+      !any(vapply(obs_ints, function(o)
+        identical(sort(strsplit(o, ":", fixed = TRUE)[[1L]]), parts), logical(1L)))
     }, logical(1L))
     pass <- !any(is_missing)
     results[["interactions"]] <- .make_check(
-      "interactions", pass, chk$interactions, obs_ints,
-      if (pass) sprintf("required interaction(s) present: %s", paste(chk$interactions, collapse = ", "))
-      else      sprintf("missing interaction(s): %s", paste(chk$interactions[is_missing], collapse = ", "))
+      "interactions", pass, exp, obs_ints,
+      if (pass) sprintf("required interaction(s) present: %s", paste(exp, collapse = ", "))
+      else      sprintf("missing interaction(s): %s", paste(exp[is_missing], collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$n_interactions)) {
+    sp         <- .parse_check_spec(chk$n_interactions); exp <- sp$value
     obs_labels <- .get_model_term_labels(obj)
     obs_n      <- sum(grepl(":", obs_labels, fixed = TRUE))
-    pass       <- obs_n == chk$n_interactions
+    pass       <- obs_n == exp
     results[["n_interactions"]] <- .make_check(
-      "n_interactions", pass, chk$n_interactions, obs_n,
-      sprintf("n_interactions: expected %d, found %d", chk$n_interactions, obs_n)
+      "n_interactions", pass, exp, obs_n,
+      sprintf("n_interactions: expected %d, found %d", exp, obs_n), sp$weight
     )
   }
 
   if (!is.null(chk$fixed_effects)) {
+    sp      <- .parse_check_spec(chk$fixed_effects); exp <- sp$value
     obs     <- .get_fixed_effects(obj)
-    missing <- setdiff(chk$fixed_effects, obs)
+    missing <- setdiff(exp, obs)
     pass    <- length(missing) == 0L
     results[["fixed_effects"]] <- .make_check(
-      "fixed_effects", pass, chk$fixed_effects, obs,
-      if (pass) sprintf("required fixed effect(s) present: %s", paste(chk$fixed_effects, collapse = ", "))
-      else      sprintf("missing fixed effect(s): %s", paste(missing, collapse = ", "))
+      "fixed_effects", pass, exp, obs,
+      if (pass) sprintf("required fixed effect(s) present: %s", paste(exp, collapse = ", "))
+      else      sprintf("missing fixed effect(s): %s", paste(missing, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$n_fixed_effects)) {
+    sp   <- .parse_check_spec(chk$n_fixed_effects); exp <- sp$value
     obs  <- length(.get_fixed_effects(obj))
-    pass <- obs == chk$n_fixed_effects
+    pass <- obs == exp
     results[["n_fixed_effects"]] <- .make_check(
-      "n_fixed_effects", pass, chk$n_fixed_effects, obs,
-      sprintf("n_fixed_effects: expected %d, found %d", chk$n_fixed_effects, obs)
+      "n_fixed_effects", pass, exp, obs,
+      sprintf("n_fixed_effects: expected %d, found %d", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk$has_fe)) {
+    sp   <- .parse_check_spec(chk$has_fe); exp <- sp$value
     obs  <- length(.get_fixed_effects(obj)) > 0L
-    pass <- obs == chk$has_fe
+    pass <- obs == exp
     results[["has_fe"]] <- .make_check(
-      "has_fe", pass, chk$has_fe, obs,
-      sprintf("has_fe: expected %s, found %s", chk$has_fe, obs)
+      "has_fe", pass, exp, obs,
+      sprintf("has_fe: expected %s, found %s", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk$cluster)) {
+    sp      <- .parse_check_spec(chk$cluster); exp <- sp$value
     obs     <- .get_cluster(obj)
-    missing <- setdiff(chk$cluster, obs %||% character(0L))
+    missing <- setdiff(exp, obs %||% character(0L))
     pass    <- length(missing) == 0L
     results[["cluster"]] <- .make_check(
-      "cluster", pass, chk$cluster,
+      "cluster", pass, exp,
       obs %||% "<none>",
-      if (pass) sprintf("clustering correct: %s", paste(chk$cluster, collapse = ", "))
+      if (pass) sprintf("clustering correct: %s", paste(exp, collapse = ", "))
       else if (is.null(obs)) sprintf("cluster: expected '%s', no clustering found",
-                                     paste(chk$cluster, collapse = ", "))
-      else sprintf("missing cluster variable(s): %s", paste(missing, collapse = ", "))
+                                     paste(exp, collapse = ", "))
+      else sprintf("missing cluster variable(s): %s", paste(missing, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$weights)) {
+    sp    <- .parse_check_spec(chk$weights); exp <- sp$value
     obs_w <- tryCatch(deparse(obj$call$weights), error = function(e) NULL)
-    pass  <- !is.null(obs_w) && obs_w == chk$weights
+    pass  <- !is.null(obs_w) && obs_w == exp
     results[["weights"]] <- .make_check(
-      "weights", pass, chk$weights, obs_w %||% "<none>",
-      sprintf("weights: expected '%s', found '%s'", chk$weights, obs_w %||% "<none>")
+      "weights", pass, exp, obs_w %||% "<none>",
+      sprintf("weights: expected '%s', found '%s'", exp, obs_w %||% "<none>"), sp$weight
     )
   }
 
   if (!is.null(chk$has_weights)) {
+    sp    <- .parse_check_spec(chk$has_weights); exp <- sp$value
     obs_w <- tryCatch(obj$call$weights, error = function(e) NULL)
     obs   <- !is.null(obs_w)
-    pass  <- obs == chk$has_weights
+    pass  <- obs == exp
     results[["has_weights"]] <- .make_check(
-      "has_weights", pass, chk$has_weights, obs,
-      sprintf("has_weights: expected %s, found %s", chk$has_weights, obs)
+      "has_weights", pass, exp, obs,
+      sprintf("has_weights: expected %s, found %s", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk$nobs)) {
+    sp   <- .parse_check_spec(chk$nobs); exp <- sp$value
     obs  <- tryCatch(nobs(obj), error = function(e) NA_integer_)
-    pass <- !is.na(obs) && obs == chk$nobs
+    pass <- !is.na(obs) && obs == exp
     results[["nobs"]] <- .make_check(
-      "nobs", pass, chk$nobs, obs,
-      sprintf("nobs: expected %d, found %s", chk$nobs,
-              if (is.na(obs)) "<unknown>" else as.character(obs))
+      "nobs", pass, exp, obs,
+      sprintf("nobs: expected %d, found %s", exp,
+              if (is.na(obs)) "<unknown>" else as.character(obs)),
+      sp$weight
     )
   }
 
   if (!is.null(chk$data)) {
+    sp       <- .parse_check_spec(chk$data); exp <- sp$value
     obs_data <- tryCatch(deparse(obj$call$data), error = function(e) NULL)
-    pass     <- !is.null(obs_data) && obs_data == chk$data
+    pass     <- !is.null(obs_data) && obs_data == exp
     results[["data"]] <- .make_check(
-      "data", pass, chk$data, obs_data %||% "<unknown>",
-      sprintf("data: expected '%s', found '%s'", chk$data, obs_data %||% "<unknown>")
+      "data", pass, exp, obs_data %||% "<unknown>",
+      sprintf("data: expected '%s', found '%s'", exp, obs_data %||% "<unknown>"),
+      sp$weight
     )
   }
 
   if (!is.null(chk$random_effects)) {
+    sp      <- .parse_check_spec(chk$random_effects); exp <- sp$value
     obs     <- .get_random_effects(obj)
-    missing <- setdiff(chk$random_effects, obs)
+    missing <- setdiff(exp, obs)
     pass    <- length(missing) == 0L
     results[["random_effects"]] <- .make_check(
-      "random_effects", pass, chk$random_effects, obs,
+      "random_effects", pass, exp, obs,
       if (pass) sprintf("required random effect grouping(s) present: %s",
-                        paste(chk$random_effects, collapse = ", "))
+                        paste(exp, collapse = ", "))
       else      sprintf("missing random effect grouping(s): %s",
-                        paste(missing, collapse = ", "))
+                        paste(missing, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$n_random_effects)) {
+    sp   <- .parse_check_spec(chk$n_random_effects); exp <- sp$value
     obs  <- length(.get_random_effects(obj))
-    pass <- obs == chk$n_random_effects
+    pass <- obs == exp
     results[["n_random_effects"]] <- .make_check(
-      "n_random_effects", pass, chk$n_random_effects, obs,
-      sprintf("n_random_effects: expected %d, found %d", chk$n_random_effects, obs)
+      "n_random_effects", pass, exp, obs,
+      sprintf("n_random_effects: expected %d, found %d", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk$has_re)) {
+    sp   <- .parse_check_spec(chk$has_re); exp <- sp$value
     obs  <- length(.get_random_effects(obj)) > 0L
-    pass <- obs == chk$has_re
+    pass <- obs == exp
     results[["has_re"]] <- .make_check(
-      "has_re", pass, chk$has_re, obs,
-      sprintf("has_re: expected %s, found %s", chk$has_re, obs)
+      "has_re", pass, exp, obs,
+      sprintf("has_re: expected %s, found %s", exp, obs), sp$weight
     )
   }
 
   if (!is.null(chk[["coef_sign"]])) {
+    sp   <- .parse_check_spec(chk[["coef_sign"]]); sign_vec <- sp$value; wt <- sp$weight
     ests <- .get_model_coef(obj)
-    for (nm in names(chk[["coef_sign"]])) {
-      sgn <- chk[["coef_sign"]][[nm]]
+    for (nm in names(sign_vec)) {
+      sgn <- sign_vec[[nm]]
       key <- paste0("coef_sign.", nm)
       if (is.null(ests) || !(nm %in% names(ests))) {
         avail <- if (!is.null(ests)) paste(names(ests), collapse = ", ") else "<none>"
         results[[key]] <- .make_check(
           key, FALSE, sgn, NA,
-          sprintf("coefficient '%s' not found; available: %s", nm, avail)
+          sprintf("coefficient '%s' not found; available: %s", nm, avail), wt
         )
         next
       }
@@ -298,16 +332,17 @@
       results[[key]] <- .make_check(
         key, pass, sgn, val,
         if (pass) sprintf("coef '%s' = %.4g has sign '%s'", nm, val, sgn)
-        else      sprintf("coef '%s' = %.4g does not satisfy sign '%s'", nm, val, sgn)
+        else      sprintf("coef '%s' = %.4g does not satisfy sign '%s'", nm, val, sgn),
+        wt
       )
     }
   }
 
   if (!is.null(chk[["coef"]])) {
+    sp        <- .parse_check_spec(chk[["coef"]]); coef_raw <- sp$value; wt <- sp$weight
     ests      <- .get_model_coef(obj)
-    coef_spec <- chk[["coef"]]
-    exp_vals  <- if (is.list(coef_spec)) coef_spec$values %||% coef_spec else coef_spec
-    tol       <- if (is.list(coef_spec)) coef_spec$tolerance %||% 0 else 0
+    exp_vals  <- if (is.list(coef_raw)) coef_raw$values %||% coef_raw else coef_raw
+    tol       <- if (is.list(coef_raw)) coef_raw$tolerance %||% 0 else 0
     if (!is.list(exp_vals)) exp_vals <- as.list(exp_vals)
     for (nm in names(exp_vals)) {
       exp <- as.numeric(exp_vals[[nm]])
@@ -316,7 +351,7 @@
         avail <- if (!is.null(ests)) paste(names(ests), collapse = ", ") else "<none>"
         results[[key]] <- .make_check(
           key, FALSE, exp, NA,
-          sprintf("coefficient '%s' not found; available: %s", nm, avail)
+          sprintf("coefficient '%s' not found; available: %s", nm, avail), wt
         )
         next
       }
@@ -327,23 +362,25 @@
         if (pass)
           sprintf("coef '%s' = %.4g within tolerance %.4g of %.4g", nm, obs, tol, exp)
         else
-          sprintf("coef '%s': expected %.4g (\u00b1%.4g), found %.4g", nm, exp, tol, obs)
+          sprintf("coef '%s': expected %.4g (\u00b1%.4g), found %.4g", nm, exp, tol, obs),
+        wt
       )
     }
   }
 
   if (!is.null(chk[["coef_sig"]])) {
+    sp        <- .parse_check_spec(chk[["coef_sig"]]); sig_vec <- sp$value; wt <- sp$weight
     sig_level <- chk[["coef_sig_level"]] %||% 0.05
     pvals     <- .get_model_pvalues(obj)
 
-    for (nm in names(chk[["coef_sig"]])) {
-      exp_sig <- isTRUE(chk[["coef_sig"]][[nm]])
+    for (nm in names(sig_vec)) {
+      exp_sig <- isTRUE(sig_vec[[nm]])
       key     <- paste0("coef_sig.", nm)
 
       if (is.null(pvals)) {
         results[[key]] <- .make_check(
           key, NA, exp_sig, NA,
-          sprintf("p-values not available for model class '%s'", cls)
+          sprintf("p-values not available for model class '%s'", cls), wt
         )
         next
       }
@@ -351,7 +388,7 @@
         avail <- paste(names(pvals), collapse = ", ")
         results[[key]] <- .make_check(
           key, FALSE, exp_sig, NA,
-          sprintf("coefficient '%s' not found; available: %s", nm, avail)
+          sprintf("coefficient '%s' not found; available: %s", nm, avail), wt
         )
         next
       }
@@ -366,7 +403,8 @@
         else
           sprintf("coef '%s': expected %s, p = %.4g (alpha = %.2f)",
                   nm, if (exp_sig) "significant" else "not significant",
-                  p, sig_level)
+                  p, sig_level),
+        wt
       )
     }
   }

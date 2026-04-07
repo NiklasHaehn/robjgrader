@@ -170,55 +170,71 @@ validate_do <- function(
   chk     <- if (is.list(checks)) checks else list()
 
   # contains
-  for (pat in chk[["contains"]] %||% character(0L)) {
-    key  <- paste0("contains.", gsub("[^a-zA-Z0-9]", "_", pat))
-    pass <- grepl(pat, target, perl = TRUE)
-    results[[key]] <- .make_check(
-      key, pass, pat, target,
-      if (pass) sprintf("Pattern '%s' found.", pat)
-      else      sprintf("Pattern '%s' not found in code.", pat)
-    )
+  if (!is.null(chk[["contains"]])) {
+    sp <- .parse_check_spec(chk[["contains"]]); pats <- sp$value
+    for (pat in pats) {
+      key  <- paste0("contains.", gsub("[^a-zA-Z0-9]", "_", pat))
+      pass <- grepl(pat, target, perl = TRUE)
+      results[[key]] <- .make_check(
+        key, pass, pat, target,
+        if (pass) sprintf("Pattern '%s' found.", pat)
+        else      sprintf("Pattern '%s' not found in code.", pat),
+        sp$weight
+      )
+    }
   }
 
   # not_contains
-  for (pat in chk[["not_contains"]] %||% character(0L)) {
-    key  <- paste0("not_contains.", gsub("[^a-zA-Z0-9]", "_", pat))
-    pass <- !grepl(pat, target, perl = TRUE)
-    results[[key]] <- .make_check(
-      key, pass, sprintf("no match for '%s'", pat), target,
-      if (pass) sprintf("Forbidden pattern '%s' not found (good).", pat)
-      else      sprintf("Forbidden pattern '%s' found in code.", pat)
-    )
+  if (!is.null(chk[["not_contains"]])) {
+    sp <- .parse_check_spec(chk[["not_contains"]]); pats <- sp$value
+    for (pat in pats) {
+      key  <- paste0("not_contains.", gsub("[^a-zA-Z0-9]", "_", pat))
+      pass <- !grepl(pat, target, perl = TRUE)
+      results[[key]] <- .make_check(
+        key, pass, sprintf("no match for '%s'", pat), target,
+        if (pass) sprintf("Forbidden pattern '%s' not found (good).", pat)
+        else      sprintf("Forbidden pattern '%s' found in code.", pat),
+        sp$weight
+      )
+    }
   }
 
-  # command — word-boundary match at line start, case-insensitive
-  for (cmd in chk[["command"]] %||% character(0L)) {
-    key  <- paste0("command.", cmd)
-    pat  <- sprintf("(?i)^\\s*%s\\b", cmd)
-    pass <- grepl(pat, target, perl = TRUE)
-    results[[key]] <- .make_check(
-      key, pass, cmd, target,
-      if (pass) sprintf("Command '%s' found.", cmd)
-      else      sprintf("Command '%s' not found in code.", cmd)
-    )
+  # command — word-boundary match at line start, case-insensitive, multiline
+  if (!is.null(chk[["command"]])) {
+    sp <- .parse_check_spec(chk[["command"]]); cmds <- sp$value
+    for (cmd in cmds) {
+      key  <- paste0("command.", cmd)
+      pat  <- sprintf("(?im)^\\s*%s\\b", cmd)
+      pass <- grepl(pat, target, perl = TRUE)
+      results[[key]] <- .make_check(
+        key, pass, cmd, target,
+        if (pass) sprintf("Command '%s' found.", cmd)
+        else      sprintf("Command '%s' not found in code.", cmd),
+        sp$weight
+      )
+    }
   }
 
   # variable — word boundary anywhere in code
-  for (var in chk[["variable"]] %||% character(0L)) {
-    key  <- paste0("variable.", var)
-    pat  <- sprintf("\\b%s\\b", var)
-    pass <- grepl(pat, target, perl = TRUE)
-    results[[key]] <- .make_check(
-      key, pass, var, target,
-      if (pass) sprintf("Variable '%s' found in code.", var)
-      else      sprintf("Variable '%s' not found in code.", var)
-    )
+  if (!is.null(chk[["variable"]])) {
+    sp <- .parse_check_spec(chk[["variable"]]); vars <- sp$value
+    for (var in vars) {
+      key  <- paste0("variable.", var)
+      pat  <- sprintf("\\b%s\\b", var)
+      pass <- grepl(pat, target, perl = TRUE)
+      results[[key]] <- .make_check(
+        key, pass, var, target,
+        if (pass) sprintf("Variable '%s' found in code.", var)
+        else      sprintf("Variable '%s' not found in code.", var),
+        sp$weight
+      )
+    }
   }
 
   # n_commands — count lines in a section
-  nc_spec <- chk[["n_commands"]]
-  if (!is.null(nc_spec)) {
-    sec_type  <- nc_spec[["type"]]   %||% "estimation"
+  if (!is.null(chk[["n_commands"]])) {
+    sp      <- .parse_check_spec(chk[["n_commands"]]); nc_spec <- sp$value
+    sec_type  <- nc_spec[["type"]]      %||% "estimation"
     expected  <- nc_spec[["expected"]]
     tolerance <- nc_spec[["tolerance"]] %||% 0L
     observed  <- length(sections[[sec_type]] %||% character(0L))
@@ -229,11 +245,12 @@ validate_do <- function(
       if (is.null(expected))
         sprintf("n_commands: section '%s' has %d lines", sec_type, observed)
       else if (pass)
-        sprintf("n_commands (%s): %d (expected %d ± %d)",
+        sprintf("n_commands (%s): %d (expected %d \u00b1 %d)",
                 sec_type, observed, expected, tolerance)
       else
-        sprintf("n_commands (%s): expected %d ± %d, found %d",
-                sec_type, expected, tolerance, observed)
+        sprintf("n_commands (%s): expected %d \u00b1 %d, found %d",
+                sec_type, expected, tolerance, observed),
+      sp$weight
     )
   }
 

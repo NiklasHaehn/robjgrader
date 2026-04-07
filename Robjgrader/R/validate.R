@@ -374,19 +374,83 @@ validate <- function(
 
 # -- Result infrastructure -----------------------------------------------------
 
-.make_check <- function(check, pass, expected, observed, message) {
-  list(
+#' Specify a weighted check value
+#'
+#' Wraps a check value with an optional point weight for partial-credit
+#' scoring.  Weighted checks are used as values inside the \code{checks}
+#' argument of any \code{validate*()} function.  When at least one check
+#' carries a weight, \code{validate()} sets \code{res$score} (0--1) equal to
+#' the weighted proportion of passed checks, which \code{run_autograder()}
+#' then multiplies by \code{max_score}.
+#'
+#' Checks without an explicit weight default to \code{weight = 1} when
+#' computing the score, so mixing weighted and unweighted checks in the same
+#' call is supported.
+#'
+#' @param value  The expected value for the check (same as the plain value you
+#'   would normally pass).
+#' @param weight Positive numeric.  Relative point weight of this check.
+#'
+#' @return An object of class \code{robjgrader_check_spec}.
+#'
+#' @examples
+#' \dontrun{
+#' validate(records, name = "m",
+#'   checks = list(
+#'     outcome    = check_spec("mpg",              weight = 3),
+#'     coef_sign  = check_spec(c(wt = "negative"), weight = 2),
+#'     nobs       = 32L   # unweighted — treated as weight = 1
+#'   )
+#' )
+#' }
+#' @export
+check_spec <- function(value, weight = NULL) {
+  if (!is.null(weight) && (!is.numeric(weight) || length(weight) != 1L || weight <= 0))
+    stop("'weight' must be a single positive number.")
+  structure(list(value = value, weight = weight), class = "robjgrader_check_spec")
+}
+
+
+# Normalise a check specification to list(value = ..., weight = ...).
+# Accepts plain values (weight = NULL) or check_spec objects.
+.parse_check_spec <- function(spec) {
+  if (inherits(spec, "robjgrader_check_spec")) {
+    list(value = spec$value, weight = spec$weight)
+  } else {
+    list(value = spec, weight = NULL)
+  }
+}
+
+
+.make_check <- function(check, pass, expected, observed, message, weight = NULL) {
+  out <- list(
     check    = check,
     pass     = pass,
     expected = expected,
     observed = observed,
     message  = message
   )
+  if (!is.null(weight)) out$weight <- weight
+  out
 }
 
 .make_result <- function(name, type, cls, checks_list) {
   overall <- if (length(checks_list) == 0L) NA else
     all(vapply(checks_list, `[[`, logical(1L), "pass"))
+
+  # Compute a normalised score (0-1) when any check carries a weight.
+  weights <- vapply(checks_list, function(chk) {
+    w <- chk[["weight"]]
+    if (is.null(w)) NA_real_ else as.numeric(w)
+  }, numeric(1L))
+
+  score <- if (any(!is.na(weights))) {
+    w      <- ifelse(is.na(weights), 1, weights)
+    passes <- vapply(checks_list, `[[`, logical(1L), "pass")
+    sum(w * passes) / sum(w)
+  } else {
+    NULL
+  }
 
   structure(
     list(
@@ -394,6 +458,7 @@ validate <- function(
       object_type  = type,
       object_class = cls,
       overall      = overall,
+      score        = score,
       checks       = checks_list
     ),
     class = "robjgrader_result"
@@ -405,8 +470,7 @@ validate <- function(
 print.robjgrader_result <- function(x, ...) {
   status <- if (is.na(x$overall)) "--" else if (x$overall) "PASS" else "FAIL"
 
-  score_str <- if (!is.null(x$score) && !is.na(x$score) &&
-                   x$object_type == "text") {
+  score_str <- if (!is.null(x$score) && !is.na(x$score)) {
     sprintf("  score: %.0f%%", x$score * 100)
   } else {
     ""
@@ -423,8 +487,9 @@ print.robjgrader_result <- function(x, ...) {
   }
 
   for (chk in x$checks) {
-    mark <- if (is.na(chk$pass)) "[?]" else if (chk$pass) "[+]" else "[-]"
-    cat(sprintf("  %s  %s\n", mark, chk$message))
+    mark    <- if (is.na(chk$pass)) "[?]" else if (chk$pass) "[+]" else "[-]"
+    wt_str  <- if (!is.null(chk$weight)) sprintf(" [w=%.4g]", chk$weight) else ""
+    cat(sprintf("  %s  %s%s\n", mark, chk$message, wt_str))
   }
 
   if (!is.null(x$feedback) && nchar(x$feedback) > 0L) {

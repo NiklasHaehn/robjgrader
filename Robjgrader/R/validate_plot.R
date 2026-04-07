@@ -43,9 +43,9 @@
   aes_keys <- grep("^aes_", names(chk), value = TRUE)
 
   for (key in aes_keys) {
-    aes_name <- sub("^aes_", "", key)
-    expected <- chk[[key]]
-    observed <- .get_aes_label(obj, aes_name)
+    sp       <- .parse_check_spec(chk[[key]])
+    expected <- sp$value
+    observed <- .get_aes_label(obj, sub("^aes_", "", key))
     pass     <- !is.null(observed) && observed == expected
 
     results[[key]] <- .make_check(
@@ -56,68 +56,77 @@
       else if (is.null(observed))
         sprintf("%s: '%s' not found -- aesthetic not mapped", key, expected)
       else
-        sprintf("%s: expected '%s', found '%s'", key, expected, observed)
+        sprintf("%s: expected '%s', found '%s'", key, expected, observed),
+      sp$weight
     )
   }
 
   if (!is.null(chk$geom)) {
-    expected_geoms <- vapply(chk$geom, .normalize_geom, character(1L))
+    sp             <- .parse_check_spec(chk$geom); exp <- sp$value
+    expected_geoms <- vapply(exp, .normalize_geom, character(1L))
     observed_geoms <- vapply(obj$layers, function(l) class(l$geom)[1L], character(1L))
     missing_geoms  <- setdiff(expected_geoms, observed_geoms)
     pass           <- length(missing_geoms) == 0L
-    missing_short  <- chk$geom[expected_geoms %in% missing_geoms]
+    missing_short  <- exp[expected_geoms %in% missing_geoms]
 
     results[["geom"]] <- .make_check(
       "geom", pass,
-      paste(chk$geom, collapse = ", "),
+      paste(exp, collapse = ", "),
       paste(observed_geoms, collapse = ", "),
-      if (pass) sprintf("required geom(s) present: %s", paste(chk$geom, collapse = ", "))
-      else      sprintf("missing geom(s): %s", paste(missing_short, collapse = ", "))
+      if (pass) sprintf("required geom(s) present: %s", paste(exp, collapse = ", "))
+      else      sprintf("missing geom(s): %s", paste(missing_short, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$facet_var)) {
+    sp           <- .parse_check_spec(chk$facet_var); exp <- sp$value
     facet_vars   <- .get_facet_vars(obj)
-    missing_vars <- setdiff(chk$facet_var, facet_vars)
+    missing_vars <- setdiff(exp, facet_vars)
     pass         <- length(missing_vars) == 0L
 
     results[["facet_var"]] <- .make_check(
-      "facet_var", pass, chk$facet_var, facet_vars,
-      if (pass) sprintf("facet variable(s) present: %s", paste(chk$facet_var, collapse = ", "))
-      else      sprintf("missing facet variable(s): %s", paste(missing_vars, collapse = ", "))
+      "facet_var", pass, exp, facet_vars,
+      if (pass) sprintf("facet variable(s) present: %s", paste(exp, collapse = ", "))
+      else      sprintf("missing facet variable(s): %s", paste(missing_vars, collapse = ", ")),
+      sp$weight
     )
   }
 
   if (!is.null(chk$facet_type)) {
+    sp           <- .parse_check_spec(chk$facet_type); exp <- sp$value
     facet_class  <- class(obj$facet)[1L]
-    expected_cls <- switch(tolower(chk$facet_type),
+    expected_cls <- switch(tolower(exp),
       "wrap" = "FacetWrap",
       "grid" = "FacetGrid",
       "null" = "FacetNull",
-      chk$facet_type
+      exp
     )
     pass <- facet_class == expected_cls
     results[["facet_type"]] <- .make_check(
-      "facet_type", pass, chk$facet_type, facet_class,
-      if (pass) sprintf("facet type correct: '%s'", chk$facet_type)
+      "facet_type", pass, exp, facet_class,
+      if (pass) sprintf("facet type correct: '%s'", exp)
       else      sprintf("facet type: expected '%s' (%s), found '%s'",
-                        chk$facet_type, expected_cls, facet_class)
+                        exp, expected_cls, facet_class),
+      sp$weight
     )
   }
 
   if (!is.null(chk$stat)) {
-    expected_stats <- vapply(chk$stat, .normalize_stat, character(1L))
+    sp             <- .parse_check_spec(chk$stat); exp <- sp$value
+    expected_stats <- vapply(exp, .normalize_stat, character(1L))
     observed_stats <- vapply(obj$layers, function(l) class(l$stat)[1L], character(1L))
     missing_stats  <- setdiff(expected_stats, observed_stats)
     pass           <- length(missing_stats) == 0L
-    missing_short  <- chk$stat[expected_stats %in% missing_stats]
+    missing_short  <- exp[expected_stats %in% missing_stats]
 
     results[["stat"]] <- .make_check(
       "stat", pass,
-      paste(chk$stat, collapse = ", "),
+      paste(exp, collapse = ", "),
       paste(observed_stats, collapse = ", "),
-      if (pass) sprintf("required stat(s) present: %s", paste(chk$stat, collapse = ", "))
-      else      sprintf("missing stat(s): %s", paste(missing_short, collapse = ", "))
+      if (pass) sprintf("required stat(s) present: %s", paste(exp, collapse = ", "))
+      else      sprintf("missing stat(s): %s", paste(missing_short, collapse = ", ")),
+      sp$weight
     )
   }
 

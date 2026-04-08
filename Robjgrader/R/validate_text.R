@@ -431,7 +431,7 @@ validate_text <- function(
       error = function(e) stop(sprintf("LLM API call failed: %s", conditionMessage(e)))
     )
 
-    result <- .parse_llm_response(raw)
+    result <- .parse_llm_response(raw, rubric_names = names(rubric))
     if (isTRUE(result$valid)) {
       parsed <- result$data
       break
@@ -557,7 +557,7 @@ validate_text <- function(
 }
 
 
-.parse_llm_response <- function(raw) {
+.parse_llm_response <- function(raw, rubric_names = NULL) {
   cleaned <- gsub("^```(?:json)?\\s*|\\s*```$", "", trimws(raw), perl = TRUE)
 
   parsed <- tryCatch(
@@ -574,11 +574,31 @@ validate_text <- function(
   if (!is.list(parsed$criteria) || length(parsed$criteria) == 0L)
     return(list(valid = FALSE, reason = "Missing or empty 'criteria' array"))
 
+  # Criteria names must match rubric names
+  if (!is.null(rubric_names) && length(rubric_names) > 0L) {
+    returned <- vapply(parsed$criteria, function(cr) cr$name %||% "", character(1L))
+    unmatched <- returned[!tolower(returned) %in% tolower(rubric_names)]
+    if (length(unmatched) > 0L)
+      return(list(valid = FALSE, reason = sprintf(
+        "Criteria name(s) not in rubric: '%s'. Expected: %s",
+        paste(unmatched, collapse = "', '"),
+        paste(rubric_names, collapse = ", ")
+      )))
+  }
+
   if (!is.null(parsed$score)) {
     s <- suppressWarnings(as.numeric(parsed$score))
     if (is.na(s) || s < 0 || s > 1)
       return(list(valid = FALSE,
                   reason = sprintf("'score' must be 0-1, got: %s", parsed$score)))
+    if (isTRUE(parsed$pass) && s < 0.5)
+      return(list(valid = FALSE, reason = sprintf(
+        "'pass' is TRUE but 'score' is %.2f (< 0.5) -- inconsistent", s
+      )))
+    if (!isTRUE(parsed$pass) && s >= 0.5)
+      return(list(valid = FALSE, reason = sprintf(
+        "'pass' is FALSE but 'score' is %.2f (>= 0.5) -- inconsistent", s
+      )))
   }
 
   list(valid = TRUE, data = parsed)
@@ -768,7 +788,8 @@ validate_text_batch <- function(
       error = function(e) stop(sprintf("LLM API call failed: %s", conditionMessage(e)))
     )
 
-    result <- .parse_llm_batch_response(raw, n)
+    rnames_list <- lapply(processed, function(it) names(it$rubric))
+    result <- .parse_llm_batch_response(raw, n, rubric_names_list = rnames_list)
     if (isTRUE(result$valid)) {
       parsed <- result$data
       break
@@ -906,7 +927,7 @@ validate_text_batch <- function(
 }
 
 
-.parse_llm_batch_response <- function(raw, expected_n) {
+.parse_llm_batch_response <- function(raw, expected_n, rubric_names_list = NULL) {
   cleaned <- gsub("^```(?:json)?\\s*|\\s*```$", "", trimws(raw), perl = TRUE)
 
   parsed <- tryCatch(
@@ -930,12 +951,33 @@ validate_text_batch <- function(
     if (!is.list(entry$criteria) || length(entry$criteria) == 0L)
       return(list(valid = FALSE,
                   reason = sprintf("Item %d missing or empty 'criteria' array", i)))
+
+    # Criteria names must match rubric names for this item
+    rnames <- rubric_names_list[[i]]
+    if (!is.null(rnames) && length(rnames) > 0L) {
+      returned  <- vapply(entry$criteria, function(cr) cr$name %||% "", character(1L))
+      unmatched <- returned[!tolower(returned) %in% tolower(rnames)]
+      if (length(unmatched) > 0L)
+        return(list(valid = FALSE, reason = sprintf(
+          "Item %d criteria name(s) not in rubric: '%s'. Expected: %s",
+          i, paste(unmatched, collapse = "', '"), paste(rnames, collapse = ", ")
+        )))
+    }
+
     if (!is.null(entry$score)) {
       s <- suppressWarnings(as.numeric(entry$score))
       if (is.na(s) || s < 0 || s > 1)
         return(list(valid = FALSE,
                     reason = sprintf("Item %d 'score' must be 0-1, got: %s",
                                      i, entry$score)))
+      if (isTRUE(entry$pass) && s < 0.5)
+        return(list(valid = FALSE, reason = sprintf(
+          "Item %d 'pass' is TRUE but 'score' is %.2f (< 0.5) -- inconsistent", i, s
+        )))
+      if (!isTRUE(entry$pass) && s >= 0.5)
+        return(list(valid = FALSE, reason = sprintf(
+          "Item %d 'pass' is FALSE but 'score' is %.2f (>= 0.5) -- inconsistent", i, s
+        )))
     }
   }
 

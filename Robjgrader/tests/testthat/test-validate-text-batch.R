@@ -10,7 +10,8 @@ batch_json <- function(items) {
 }
 
 # One valid batch item
-batch_item <- function(pass = TRUE, score = 0.8,
+# score defaults are consistent with pass: TRUE → 0.8, FALSE → 0.2
+batch_item <- function(pass = TRUE, score = if (isTRUE(pass)) 0.8 else 0.2,
                        criteria = list(list(name = "c1", pass = TRUE,
                                             message = "ok")),
                        feedback = NULL) {
@@ -19,12 +20,15 @@ batch_item <- function(pass = TRUE, score = 0.8,
   obj
 }
 
+# Criterion names match base_items rubric: q1 = "direction", q2 = "reason"
 two_items_json <- function(pass1 = TRUE, pass2 = FALSE,
                             score1 = 1.0, score2 = 0.3) {
   as.character(batch_json(list(
-    batch_item(pass = pass1, score = score1),
+    batch_item(pass = pass1, score = score1,
+               criteria = list(list(name = "direction", pass = isTRUE(pass1),
+                                    message = "ok"))),
     batch_item(pass = pass2, score = score2,
-               criteria = list(list(name = "c1", pass = FALSE,
+               criteria = list(list(name = "reason", pass = isTRUE(pass2),
                                     message = "missing")))
   )))
 }
@@ -121,7 +125,9 @@ test_that("validate_text_batch: item name overrides key name", {
     q1 = list(text = "x", question = "Q", rubric = c(a = "b"), name = "my_q1")
   )
   local_mocked_bindings(
-    .call_llm_tokens = function(...) as.character(batch_json(list(batch_item()))),
+    .call_llm_tokens = function(...) as.character(batch_json(list(
+      batch_item(criteria = list(list(name = "a", pass = TRUE, message = "ok")))
+    ))),
     .package = "Robjgrader"
   )
   res <- validate_text_batch(items, api_key = "test-key")
@@ -136,7 +142,7 @@ test_that("validate_text_batch: checks field populated from criteria", {
   res <- validate_text_batch(base_items, api_key = "test-key")
   expect_true(is.list(res$q1$checks))
   expect_length(res$q1$checks, 1L)
-  expect_equal(res$q1$checks[[1L]]$name, "c1")
+  expect_equal(res$q1$checks[[1L]]$name, "direction")
 })
 
 test_that("validate_text_batch: unnamed items get q1/q2/... names", {
@@ -145,7 +151,10 @@ test_that("validate_text_batch: unnamed items get q1/q2/... names", {
     list(text = "b", question = "Q2", rubric = c(c = "d"))
   )
   local_mocked_bindings(
-    .call_llm_tokens = function(...) two_items_json(),
+    .call_llm_tokens = function(...) as.character(batch_json(list(
+      batch_item(criteria = list(list(name = "a", pass = TRUE, message = "ok"))),
+      batch_item(pass = FALSE, criteria = list(list(name = "c", pass = FALSE, message = "missing")))
+    ))),
     .package = "Robjgrader"
   )
   res <- validate_text_batch(items, api_key = "test-key")
@@ -161,7 +170,8 @@ test_that("validate_text_batch: feedback populated when requested", {
     q1 = list(text = "x", question = "Q", rubric = c(a = "b"), feedback = TRUE)
   )
   resp <- as.character(batch_json(list(
-    batch_item(feedback = "Well done.")
+    batch_item(criteria = list(list(name = "a", pass = TRUE, message = "ok")),
+               feedback = "Well done.")
   )))
   local_mocked_bindings(
     .call_llm_tokens = function(...) resp,
@@ -173,7 +183,9 @@ test_that("validate_text_batch: feedback populated when requested", {
 
 test_that("validate_text_batch: feedback NULL when feedback = FALSE", {
   local_mocked_bindings(
-    .call_llm_tokens = function(...) as.character(batch_json(list(batch_item()))),
+    .call_llm_tokens = function(...) as.character(batch_json(list(
+      batch_item(criteria = list(list(name = "a", pass = TRUE, message = "ok")))
+    ))),
     .package = "Robjgrader"
   )
   items <- list(q1 = list(text = "x", question = "Q", rubric = c(a = "b")))
@@ -283,6 +295,50 @@ test_that(".parse_llm_batch_response: out-of-range score → valid = FALSE", {
   res   <- .parse_llm_batch_response(json, 1L)
   expect_false(res$valid)
   expect_match(res$reason, "score")
+})
+
+test_that(".parse_llm_batch_response: criteria name not in rubric → valid = FALSE", {
+  items <- list(list(pass = TRUE, score = 0.9,
+                     criteria = list(list(name = "invented", pass = TRUE, message = "ok"))))
+  json  <- as.character(batch_json(items))
+  res   <- .parse_llm_batch_response(json, 1L, rubric_names_list = list(c("direction", "magnitude")))
+  expect_false(res$valid)
+  expect_match(res$reason, "invented")
+  expect_match(res$reason, "rubric")
+})
+
+test_that(".parse_llm_batch_response: criteria names match rubric (case-insensitive) → valid", {
+  items <- list(list(pass = TRUE, score = 0.9,
+                     criteria = list(list(name = "Direction", pass = TRUE, message = "ok"))))
+  json  <- as.character(batch_json(items))
+  res   <- .parse_llm_batch_response(json, 1L, rubric_names_list = list(c("direction")))
+  expect_true(res$valid)
+})
+
+test_that(".parse_llm_batch_response: pass=TRUE score < 0.5 → valid = FALSE", {
+  items <- list(list(pass = TRUE, score = 0.2,
+                     criteria = list(list(name = "c1", pass = TRUE, message = "ok"))))
+  json  <- as.character(batch_json(items))
+  res   <- .parse_llm_batch_response(json, 1L)
+  expect_false(res$valid)
+  expect_match(res$reason, "inconsistent")
+})
+
+test_that(".parse_llm_batch_response: pass=FALSE score >= 0.5 → valid = FALSE", {
+  items <- list(list(pass = FALSE, score = 0.7,
+                     criteria = list(list(name = "c1", pass = FALSE, message = "fail"))))
+  json  <- as.character(batch_json(items))
+  res   <- .parse_llm_batch_response(json, 1L)
+  expect_false(res$valid)
+  expect_match(res$reason, "inconsistent")
+})
+
+test_that(".parse_llm_batch_response: consistent pass/score → valid", {
+  items <- list(list(pass = TRUE, score = 0.8,
+                     criteria = list(list(name = "c1", pass = TRUE, message = "ok"))))
+  json  <- as.character(batch_json(items))
+  res   <- .parse_llm_batch_response(json, 1L)
+  expect_true(res$valid)
 })
 
 # ==============================================================================

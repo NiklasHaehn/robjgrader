@@ -185,6 +185,46 @@ test_that(".parse_llm_response: valid when score field absent", {
   expect_true(result$valid)
 })
 
+test_that(".parse_llm_response: invalid when criteria name not in rubric", {
+  raw <- '{"pass": true, "score": 0.8, "criteria": [{"name": "invented", "pass": true, "message": "ok"}]}'
+  result <- Robjgrader:::.parse_llm_response(raw, rubric_names = c("direction", "magnitude"))
+  expect_false(result$valid)
+  expect_match(result$reason, "invented")
+  expect_match(result$reason, "rubric")
+})
+
+test_that(".parse_llm_response: valid when criteria names match rubric (case-insensitive)", {
+  raw <- '{"pass": true, "score": 0.9, "criteria": [{"name": "Direction", "pass": true, "message": "ok"}]}'
+  result <- Robjgrader:::.parse_llm_response(raw, rubric_names = c("direction", "magnitude"))
+  expect_true(result$valid)
+})
+
+test_that(".parse_llm_response: invalid when pass=TRUE but score < 0.5", {
+  raw <- '{"pass": true, "score": 0.2, "criteria": [{"name": "x", "pass": true, "message": "ok"}]}'
+  result <- Robjgrader:::.parse_llm_response(raw)
+  expect_false(result$valid)
+  expect_match(result$reason, "inconsistent")
+})
+
+test_that(".parse_llm_response: invalid when pass=FALSE but score >= 0.5", {
+  raw <- '{"pass": false, "score": 0.7, "criteria": [{"name": "x", "pass": false, "message": "fail"}]}'
+  result <- Robjgrader:::.parse_llm_response(raw)
+  expect_false(result$valid)
+  expect_match(result$reason, "inconsistent")
+})
+
+test_that(".parse_llm_response: valid when pass=TRUE and score >= 0.5", {
+  raw <- '{"pass": true, "score": 0.8, "criteria": [{"name": "x", "pass": true, "message": "ok"}]}'
+  result <- Robjgrader:::.parse_llm_response(raw)
+  expect_true(result$valid)
+})
+
+test_that(".parse_llm_response: valid when pass=FALSE and score < 0.5", {
+  raw <- '{"pass": false, "score": 0.3, "criteria": [{"name": "x", "pass": false, "message": "fail"}]}'
+  result <- Robjgrader:::.parse_llm_response(raw)
+  expect_true(result$valid)
+})
+
 
 # ==============================================================================
 # validate_text() — with mocked LLM

@@ -599,3 +599,345 @@ validate_text <- function(
     class = "robjgrader_result"
   )
 }
+
+
+#' Validate multiple text answers in a single LLM call
+#'
+#' Sends all questions, rubrics, and student answers in one API request,
+#' reducing token costs by paying for the system-prompt only once instead of
+#' once per question.  Returns a named list of \code{robjgrader_result} objects
+#' that can be passed directly to \code{run_autograder()}.
+#'
+#' @details
+#' Each element of \code{items} is a named list with the following fields:
+#' \describe{
+#'   \item{\code{text}}{Character. The student answer text (required).}
+#'   \item{\code{question}}{Character. The question prompt (required).}
+#'   \item{\code{rubric}}{Named character vector of grading criteria (required).}
+#'   \item{\code{name}}{Character. Label for the result object.  Defaults to
+#'     the list element name or \code{"q<i>"}.}
+#'   \item{\code{feedback}}{Logical. Request written feedback.  Defaults to
+#'     \code{FALSE}.}
+#'   \item{\code{reference}}{Character or \code{NULL}. Optional reference
+#'     answer injected into the prompt.}
+#'   \item{\code{section}}{Character or \code{NULL}. Section heading to
+#'     extract from \code{text} before grading.}
+#'   \item{\code{match_section}}{List or \code{NULL}. Regex-based section
+#'     selector; see \code{\link{validate_text}}.}
+#' }
+#'
+#' @param items     Named or unnamed list of item specs.  See Details.
+#' @param model     Character. Model identifier.
+#' @param base_url  Character. API base URL.
+#' @param api_key   Character. Bearer token.
+#' @param max_retry Integer. Number of retry attempts if the LLM returns
+#'   malformed JSON (default \code{3L}).
+#'
+#' @return A named list of \code{robjgrader_result} objects, one per item.
+#'
+#' @examples
+#' \dontrun{
+#' robjgrader_set_llm(provider = "openai")
+#'
+#' text <- read_student_text("submission.pdf")
+#'
+#' results <- validate_text_batch(list(
+#'   q1 = list(
+#'     text     = text,
+#'     question = "Interpret the coefficient on log GDP.",
+#'     rubric   = c(direction = "mentions positive effect",
+#'                  magnitude = "comments on magnitude")
+#'   ),
+#'   q2 = list(
+#'     text     = text,
+#'     question = "Why do we use clustered standard errors?",
+#'     rubric   = c(reason = "mentions within-group correlation")
+#'   )
+#' ))
+#'
+#' run_autograder(list(
+#'   list(name = "Q1", result = results$q1, max_score = 5),
+#'   list(name = "Q2", result = results$q2, max_score = 3)
+#' ))
+#' }
+#' @export
+validate_text_batch <- function(
+  items,
+  model     = getOption("robjgrader.llm.model",    "llama-3.3-70b-versatile"),
+  base_url  = getOption("robjgrader.llm.base_url", "https://api.groq.com/openai/v1"),
+  api_key   = getOption("robjgrader.llm.api_key",  Sys.getenv("GROQ_API_KEY")),
+  max_retry = 3L
+) {
+  if (!is.list(items) || length(items) == 0L)
+    stop("'items' must be a non-empty list.")
+  if (nchar(api_key) == 0L)
+    stop("No API key found. Call robjgrader_set_llm() or set GROQ_API_KEY.")
+
+  # Normalise item names
+  item_names <- names(items)
+  if (is.null(item_names)) item_names <- rep("", length(items))
+  item_names <- ifelse(nzchar(item_names), item_names,
+                       paste0("q", seq_along(items)))
+
+  # Pre-process each item: extract section, resolve reference text, build name
+  processed <- lapply(seq_along(items), function(i) {
+    it   <- items[[i]]
+    nm   <- item_names[[i]]
+    text <- it[["text"]]
+    if (is.null(text)) stop(sprintf("Item '%s' is missing 'text'.", nm))
+    if (is.null(it[["question"]])) stop(sprintf("Item '%s' is missing 'question'.", nm))
+    if (is.null(it[["rubric"]]))   stop(sprintf("Item '%s' is missing 'rubric'.", nm))
+
+    # Section extraction
+    if (!is.null(it[["section"]]) && !is.null(it[["match_section"]]))
+      stop(sprintf("Item '%s': 'section' and 'match_section' are mutually exclusive.", nm))
+    if (!is.null(it[["section"]])) {
+      secs <- split_student_text(text)
+      text <- .extract_section(secs, it[["section"]], nm)
+    } else if (!is.null(it[["match_section"]])) {
+      secs <- split_student_text(text)
+      text <- .extract_section_match(secs, it[["match_section"]], nm)
+    }
+
+    # Reference text
+    ref <- it[["reference"]]
+    ref_text <- if (is.list(ref)) {
+      full <- read_student_text(ref$path)
+      ref_secs <- split_student_text(full)
+      .extract_section(ref_secs, ref$section, paste0(nm, " reference"))
+    } else if (is.character(ref) && length(ref) == 1L && file.exists(ref)) {
+      read_student_text(ref)
+    } else if (!is.null(ref)) {
+      as.character(ref)
+    } else {
+      NULL
+    }
+
+    list(
+      name      = it[["name"]] %||% nm,
+      text      = text,
+      question  = it[["question"]],
+      rubric    = it[["rubric"]],
+      feedback  = isTRUE(it[["feedback"]]),
+      ref_text  = ref_text
+    )
+  })
+
+  n <- length(processed)
+
+  # Build system prompt once for all items
+  sys_prompt <- .build_batch_prompt(processed)
+
+  # Build user message: all answers numbered
+  user_content <- paste(
+    vapply(seq_len(n), function(i) {
+      sprintf("### ANSWER %d\n%s", i, processed[[i]]$text)
+    }, character(1L)),
+    collapse = "\n\n"
+  )
+
+  messages <- list(
+    list(role = "system", content = sys_prompt),
+    list(role = "user",   content = user_content)
+  )
+
+  # Call LLM with retry
+  parsed     <- NULL
+  error_note <- NULL
+
+  for (attempt in seq_len(max_retry)) {
+    msgs <- if (!is.null(error_note)) {
+      c(messages,
+        list(
+          list(role = "assistant", content = error_note$raw),
+          list(role = "user",
+               content = paste0(
+                 "Your previous response was invalid: ", error_note$reason,
+                 "\nPlease return only valid JSON matching the required schema."
+               ))
+        ))
+    } else {
+      messages
+    }
+
+    # Scale max_tokens with number of items
+    max_tok <- 400L + n * 300L
+
+    raw <- tryCatch(
+      .call_llm_tokens(msgs, model, base_url, api_key, max_tok),
+      error = function(e) stop(sprintf("LLM API call failed: %s", conditionMessage(e)))
+    )
+
+    result <- .parse_llm_batch_response(raw, n)
+    if (isTRUE(result$valid)) {
+      parsed <- result$data
+      break
+    }
+    error_note <- list(raw = raw, reason = result$reason)
+  }
+
+  # Build result list — one entry per item
+  out <- vector("list", n)
+  names(out) <- item_names
+
+  for (i in seq_len(n)) {
+    nm <- processed[[i]]$name
+    if (is.null(parsed)) {
+      out[[i]] <- .text_error_result(nm, sprintf(
+        "LLM returned an invalid batch response after %d attempt(s): %s",
+        max_retry, error_note$reason
+      ))
+      next
+    }
+
+    entry <- parsed[[i]]
+    checks <- lapply(entry$criteria %||% list(), function(cr) {
+      list(name    = cr$name    %||% "criterion",
+           pass    = isTRUE(cr$pass),
+           message = cr$message %||% "")
+    })
+
+    overall <- isTRUE(entry$pass)
+    score   <- if (!is.null(entry$score)) {
+      max(0, min(1, as.numeric(entry$score)))
+    } else {
+      if (overall) 1 else 0
+    }
+
+    fb <- if (processed[[i]]$feedback && !is.null(entry$feedback)) entry$feedback else NULL
+
+    out[[i]] <- structure(
+      list(
+        object_name  = nm,
+        object_type  = "text",
+        object_class = "character",
+        overall      = overall,
+        score        = score,
+        checks       = checks,
+        feedback     = fb
+      ),
+      class = "robjgrader_result"
+    )
+  }
+
+  out
+}
+
+
+# -- Batch helpers -------------------------------------------------------------
+
+.build_batch_prompt <- function(processed) {
+  n <- length(processed)
+
+  items_block <- paste(
+    vapply(seq_len(n), function(i) {
+      it      <- processed[[i]]
+      rubric  <- it$rubric
+      crit_block <- paste(
+        mapply(function(nm, desc) sprintf("    - %s: %s", nm, desc),
+               names(rubric), as.character(rubric)),
+        collapse = "\n"
+      )
+      ref_block <- if (!is.null(it$ref_text) && nzchar(trimws(it$ref_text)))
+        sprintf("\n  Reference answer: %s", it$ref_text)
+      else ""
+
+      fb_note <- if (it$feedback) "\n  (also provide a 'feedback' field for this item)" else ""
+
+      sprintf("ITEM %d\n  Question: %s\n  Criteria:\n%s%s%s",
+              i, it$question, crit_block, ref_block, fb_note)
+    }, character(1L)),
+    collapse = "\n\n"
+  )
+
+  feedback_schema <- if (any(vapply(processed, `[[`, logical(1L), "feedback")))
+    "\n    \"feedback\": \"<optional written feedback, max 3 sentences>\","
+  else ""
+
+  sprintf(
+    paste0(
+      "You are a grader for a political science methods course.\n\n",
+      "You will receive %d student answers below (labeled ANSWER 1 through ANSWER %d).\n",
+      "Grade each answer independently against its criteria.\n\n",
+      "%s\n\n",
+      "Return ONLY a JSON array with exactly %d objects -- no prose, ",
+      "no markdown code fences:\n",
+      "[\n",
+      "  {\n",
+      "    \"pass\": <true/false>,\n",
+      "    \"score\": <0-1>,\n",
+      "    \"criteria\": [\n",
+      "      { \"name\": \"<criterion>\", \"pass\": <true/false>,",
+      " \"message\": \"<1 sentence>\" }\n",
+      "    ]%s\n",
+      "  }\n",
+      "]\n\n",
+      "The array must have exactly %d elements in the same order as the answers.\n",
+      "Return ONLY the JSON array."
+    ),
+    n, n, items_block, n, feedback_schema, n
+  )
+}
+
+
+.call_llm_tokens <- function(messages, model, base_url, api_key, max_tokens) {
+  if (!requireNamespace("httr2", quietly = TRUE))
+    stop("Package 'httr2' is required. Install with: install.packages('httr2')")
+
+  resp <- httr2::request(paste0(base_url, "/chat/completions")) |>
+    httr2::req_auth_bearer_token(api_key) |>
+    httr2::req_body_json(list(
+      model       = model,
+      messages    = messages,
+      temperature = 0,
+      max_tokens  = max_tokens
+    )) |>
+    httr2::req_error(is_error = function(resp) FALSE) |>
+    httr2::req_perform()
+
+  status <- httr2::resp_status(resp)
+  if (status != 200L) {
+    body <- tryCatch(httr2::resp_body_json(resp), error = function(e) list())
+    msg  <- body$error$message %||% httr2::resp_status_desc(resp)
+    stop(sprintf("API error %d: %s", status, msg))
+  }
+
+  httr2::resp_body_json(resp)$choices[[1L]]$message$content
+}
+
+
+.parse_llm_batch_response <- function(raw, expected_n) {
+  cleaned <- gsub("^```(?:json)?\\s*|\\s*```$", "", trimws(raw), perl = TRUE)
+
+  parsed <- tryCatch(
+    jsonlite::fromJSON(cleaned, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+
+  if (is.null(parsed) || !is.list(parsed))
+    return(list(valid = FALSE, reason = "Response is not a valid JSON array"))
+
+  if (length(parsed) != expected_n)
+    return(list(valid = FALSE, reason = sprintf(
+      "Expected array of length %d, got %d", expected_n, length(parsed)
+    )))
+
+  for (i in seq_along(parsed)) {
+    entry <- parsed[[i]]
+    if (is.null(entry$pass))
+      return(list(valid = FALSE,
+                  reason = sprintf("Item %d missing required field 'pass'", i)))
+    if (!is.list(entry$criteria) || length(entry$criteria) == 0L)
+      return(list(valid = FALSE,
+                  reason = sprintf("Item %d missing or empty 'criteria' array", i)))
+    if (!is.null(entry$score)) {
+      s <- suppressWarnings(as.numeric(entry$score))
+      if (is.na(s) || s < 0 || s > 1)
+        return(list(valid = FALSE,
+                    reason = sprintf("Item %d 'score' must be 0-1, got: %s",
+                                     i, entry$score)))
+    }
+  }
+
+  list(valid = TRUE, data = parsed)
+}

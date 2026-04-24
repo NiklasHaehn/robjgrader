@@ -59,10 +59,15 @@ grade_async_submit <- function(
     if (is.null(student_ids) || any(!nzchar(student_ids)))
       stop(sprintf("Question spec '%s': 'answers' must be a non-empty named vector.", q_name))
 
+    # Use anonymous sequential indices so no identifying information is sent
+    # to the LLM. The manifest stores the mapping for use during collection.
+    idx_labels  <- as.character(seq_along(student_ids))
+    idx_to_sid  <- setNames(student_ids, idx_labels)
+
     sys_prompt   <- .build_student_batch_prompt(spec$question, spec$rubric, spec$reference)
     user_content <- paste(
-      vapply(student_ids, function(sid) {
-        sprintf("### STUDENT %s\n%s", sid, as.character(spec$answers[[sid]]))
+      vapply(idx_labels, function(i) {
+        sprintf("### STUDENT %s\n%s", i, as.character(spec$answers[[idx_to_sid[[i]]]]))
       }, character(1L)),
       collapse = "\n\n"
     )
@@ -87,7 +92,8 @@ grade_async_submit <- function(
     ), auto_unbox = TRUE)
 
     manifest_items[[q_name]] <- list(
-      student_ids  = student_ids,
+      student_ids  = student_ids,   # real IDs, for keying the final output
+      idx_labels   = idx_labels,    # anonymous indices used in the prompt
       rubric_names = names(spec$rubric),
       max_score    = spec$max_score %||% NULL
     )
@@ -267,8 +273,10 @@ grade_async_collect <- function(
       next
     }
 
-    item        <- manifest$items[[q_name]]
-    student_ids <- item$student_ids
+    item         <- manifest$items[[q_name]]
+    student_ids  <- item$student_ids
+    idx_labels   <- item$idx_labels %||% as.character(seq_along(student_ids))
+    idx_to_sid   <- setNames(student_ids, idx_labels)
     rubric_names <- item$rubric_names %||% NULL
 
     if (!is.null(line_parsed$error)) {
@@ -289,7 +297,7 @@ grade_async_collect <- function(
       next
     }
 
-    parse_result <- .parse_student_batch_response(raw_content, student_ids, rubric_names)
+    parse_result <- .parse_student_batch_response(raw_content, idx_labels, rubric_names)
 
     if (!isTRUE(parse_result$valid)) {
       warning(sprintf("Invalid response for question '%s': %s", q_name, parse_result$reason))
@@ -301,8 +309,9 @@ grade_async_collect <- function(
     q_results <- vector("list", length(student_ids))
     names(q_results) <- student_ids
 
-    for (sid in student_ids) {
-      entry_data <- parse_result$data[[sid]]
+    for (idx in idx_labels) {
+      sid        <- idx_to_sid[[idx]]
+      entry_data <- parse_result$data[[idx]]
       if (is.null(entry_data)) {
         q_results[[sid]] <- .text_error_result(sid, "Missing from batch response")
         next

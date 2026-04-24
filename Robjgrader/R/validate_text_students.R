@@ -87,12 +87,17 @@ validate_text_students <- function(
   sys_prompt   <- .build_student_batch_prompt(question, rubric, reference)
 
   while (length(pending) > 0L) {
-    can_retry <- pending[retry_count[pending] < max_retry]
+    can_retry  <- pending[retry_count[pending] < max_retry]
     if (length(can_retry) == 0L) break
 
+    # Map real student IDs to anonymous sequential indices so no identifying
+    # information is sent to the LLM.
+    idx_labels <- as.character(seq_along(can_retry))
+    idx_to_sid <- setNames(can_retry, idx_labels)
+
     user_content <- paste(
-      vapply(can_retry, function(sid) {
-        sprintf("### STUDENT %s\n%s", sid, as.character(answers[[sid]]))
+      vapply(idx_labels, function(i) {
+        sprintf("### STUDENT %s\n%s", i, as.character(answers[[idx_to_sid[[i]]]]))
       }, character(1L)),
       collapse = "\n\n"
     )
@@ -124,12 +129,13 @@ validate_text_students <- function(
 
     retry_count[can_retry] <- retry_count[can_retry] + 1L
 
-    parse_result <- .parse_student_batch_response(raw, can_retry, rubric_names)
+    parse_result <- .parse_student_batch_response(raw, idx_labels, rubric_names)
 
     if (isTRUE(parse_result$valid)) {
-      # Resolve valid entries
-      for (sid in names(parse_result$data)) {
-        entry  <- parse_result$data[[sid]]
+      # Resolve valid entries — map anonymous index back to real student ID
+      for (idx in names(parse_result$data)) {
+        sid    <- idx_to_sid[[idx]]
+        entry  <- parse_result$data[[idx]]
         checks <- lapply(entry$criteria %||% list(), function(cr) {
           list(name    = cr$name    %||% "criterion",
                pass    = isTRUE(cr$pass),
@@ -204,12 +210,12 @@ validate_text_students <- function(
       "QUESTION:\n%s\n\n",
       "GRADING CRITERIA (assess each independently):\n%s\n",
       "%s\n",
-      "You will receive answers from multiple students, each labeled ### STUDENT <id>.\n",
+      "You will receive answers from multiple students, each labeled ### STUDENT <n>.\n",
       "Grade each student's answer independently against all %d criterion/criteria above.\n\n",
       "Return ONLY a JSON array — no prose, no markdown fences:\n",
       "[\n",
       "  {\n",
-      "    \"student_id\": \"<id as shown above>\",\n",
+      "    \"student_id\": \"<n>\",\n",
       "    \"pass\": <true if overall satisfactory, else false>,\n",
       "    \"score\": <0.0-1.0>,\n",
       "    \"criteria\": [\n",

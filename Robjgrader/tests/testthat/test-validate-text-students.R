@@ -206,9 +206,10 @@ test_that(".parse_student_batch_response: pass=FALSE score>=0.5 → in failed", 
 
 test_that("validate_text_students: returns robjgrader_result per student", {
   local_mocked_bindings(
+    # s1 → index "1", s2 → index "2"
     .call_llm_tokens = function(...) {
-      students_json(student_response("s1", pass = TRUE, score = 0.9),
-                    student_response("s2", pass = FALSE, score = 0.2))
+      students_json(student_response("1", pass = TRUE, score = 0.9),
+                    student_response("2", pass = FALSE, score = 0.2))
     },
     .package = "Robjgrader"
   )
@@ -228,7 +229,8 @@ test_that("validate_text_students: returns robjgrader_result per student", {
 
 test_that("validate_text_students: object_name matches student ID", {
   local_mocked_bindings(
-    .call_llm_tokens = function(...) students_json(student_response("s1")),
+    # single student → index "1"; object_name must be the real ID "s1"
+    .call_llm_tokens = function(...) students_json(student_response("1")),
     .package = "Robjgrader"
   )
   res <- validate_text_students("Q", base_rubric, c(s1 = "answer"), api_key = "k")
@@ -238,7 +240,7 @@ test_that("validate_text_students: object_name matches student ID", {
 
 test_that("validate_text_students: checks populated from criteria", {
   local_mocked_bindings(
-    .call_llm_tokens = function(...) students_json(student_response("s1")),
+    .call_llm_tokens = function(...) students_json(student_response("1")),
     .package = "Robjgrader"
   )
   res <- validate_text_students("Q", base_rubric, c(s1 = "answer"), api_key = "k")
@@ -276,17 +278,17 @@ test_that("validate_text_students: valid student resolved early, only failing re
     .call_llm_tokens = function(...) {
       call_n <<- call_n + 1L
       if (call_n == 1L) {
-        # s1 valid, s2 invalid (missing pass)
+        # Round 1: both students → s1 = index "1" (valid), s2 = index "2" (missing pass)
         items <- list(
-          list(student_id = "s1", pass = TRUE, score = 0.9,
+          list(student_id = "1", pass = TRUE, score = 0.9,
                criteria = list(list(name = "direction", pass = TRUE, message = "ok"))),
-          list(student_id = "s2", score = 0.5,
+          list(student_id = "2", score = 0.5,
                criteria = list(list(name = "direction", pass = TRUE, message = "ok")))
         )
         as.character(jsonlite::toJSON(items, auto_unbox = TRUE))
       } else {
-        # second call: only s2
-        students_json(student_response("s2", pass = FALSE, score = 0.2))
+        # Round 2: only s2 remains → gets fresh index "1"
+        students_json(student_response("1", pass = FALSE, score = 0.2))
       }
     },
     .package = "Robjgrader"
@@ -299,7 +301,7 @@ test_that("validate_text_students: valid student resolved early, only failing re
 })
 
 test_that("validate_text_students: score=NULL defaults to 1 when pass=TRUE", {
-  items <- list(list(student_id = "s1", pass = TRUE,
+  items <- list(list(student_id = "1", pass = TRUE,
                      criteria = list(list(name = "direction", pass = TRUE, message = "ok"))))
   local_mocked_bindings(
     .call_llm_tokens = function(...)
@@ -311,7 +313,7 @@ test_that("validate_text_students: score=NULL defaults to 1 when pass=TRUE", {
 })
 
 test_that("validate_text_students: score=NULL defaults to 0 when pass=FALSE", {
-  items <- list(list(student_id = "s1", pass = FALSE,
+  items <- list(list(student_id = "1", pass = FALSE,
                      criteria = list(list(name = "direction", pass = FALSE, message = "bad"))))
   local_mocked_bindings(
     .call_llm_tokens = function(...)
